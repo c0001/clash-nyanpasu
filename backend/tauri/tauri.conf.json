@@ -56,8 +56,7 @@
         "depends": ["openssl"]
       }
     },
-    "licenseFile": "../../LICENSE",
-    "createUpdaterArtifacts": "v1Compatible"
+    "licenseFile": "../../LICENSE"
   },
   "build": {
     "beforeBuildCommand": "pnpm run-p web:build generate:git-info && echo $(pwd)",
@@ -69,13 +68,10 @@
   "version": "1.6.0",
   "identifier": "moe.elaina.clash.nyanpasu",
   "plugins": {
+    "active": false,
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlBMUM0NjMxREZCNDRGMjYKUldRbVQ3VGZNVVljbW43N0FlWjA4UkNrbTgxSWxSSXJQcExXNkZjUTlTQkIyYkJzL0tsSWF2d0cK",
-      "endpoints": [
-        "https://mirror.ghproxy.com/https://github.com/libnyanpasu/clash-nyanpasu/releases/download/updater/update-proxy.json",
-        "https://gh-proxy.com/https://github.com/libnyanpasu/clash-nyanpasu/releases/download/updater/update-proxy.json",
-        "https://github.com/libnyanpasu/clash-nyanpasu/releases/download/updater/update.json"
-      ]
+      "pubkey": "",
+      "endpoints": []
     }
   },
   "app": {
