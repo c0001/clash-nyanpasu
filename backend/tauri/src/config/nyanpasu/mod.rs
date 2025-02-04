@@ -4,16 +4,20 @@ use anyhow::Result;
 use enumflags2::bitflags;
 use nyanpasu_macro::VergePatch;
 use serde::{Deserialize, Serialize};
+use specta::Type;
+
 mod clash_strategy;
 pub mod logging;
+mod widget;
 
 pub use self::clash_strategy::{ClashStrategy, ExternalControllerPortStrategy};
 pub use logging::LoggingLevel;
+pub use widget::NetworkStatisticWidgetConfig;
 
 // TODO: when support sing-box, remove this struct
 #[bitflags]
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Type)]
 pub enum ClashCore {
     #[serde(rename = "clash", alias = "clash-premium")]
     ClashPremium = 0b0001,
@@ -99,7 +103,7 @@ impl TryFrom<&nyanpasu_utils::core::CoreType> for ClashCore {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ProxiesSelectorMode {
     Hidden,
@@ -108,7 +112,7 @@ pub enum ProxiesSelectorMode {
     Submenu,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum TunStack {
     System,
@@ -128,8 +132,9 @@ impl AsRef<str> for TunStack {
 }
 
 /// ### `verge.yaml` schema
-#[derive(Default, Debug, Clone, Deserialize, Serialize, VergePatch)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize, VergePatch, specta::Type)]
 #[verge(patch_fn = "patch_config")]
+// TODO: use new managedState and builder pattern instead
 pub struct IVerge {
     /// app listening port for app singleton
     pub app_singleton_port: Option<u16>,
@@ -143,10 +148,6 @@ pub struct IVerge {
 
     /// `light` or `dark` or `system`
     pub theme_mode: Option<String>,
-
-    /// enable blur mode
-    /// maybe be able to set the alpha
-    pub theme_blur: Option<bool>,
 
     /// enable traffic graph default is true
     pub traffic_graph: Option<bool>,
@@ -184,7 +185,7 @@ pub struct IVerge {
     pub proxy_guard_interval: Option<u64>,
 
     /// theme setting
-    pub theme_setting: Option<IVergeTheme>,
+    pub theme_color: Option<String>,
 
     /// web ui list
     pub web_ui_list: Option<Vec<String>>,
@@ -246,9 +247,13 @@ pub struct IVerge {
     /// Tun 堆栈选择
     /// TODO: 弃用此字段，转移到 clash config 里
     pub tun_stack: Option<TunStack>,
+
+    /// 是否启用网络统计信息浮窗
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub network_statistic_widget: Option<NetworkStatisticWidgetConfig>,
 }
 
-#[derive(Default, Debug, Clone, Deserialize, Serialize)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize, Type)]
 pub struct WindowState {
     pub width: u32,
     pub height: u32,
@@ -256,24 +261,6 @@ pub struct WindowState {
     pub y: i32,
     pub maximized: bool,
     pub fullscreen: bool,
-}
-
-#[derive(Default, Debug, Clone, Deserialize, Serialize)]
-pub struct IVergeTheme {
-    pub primary_color: Option<String>,
-    pub secondary_color: Option<String>,
-    pub primary_text: Option<String>,
-    pub secondary_text: Option<String>,
-
-    pub info_color: Option<String>,
-    pub error_color: Option<String>,
-    pub warning_color: Option<String>,
-    pub success_color: Option<String>,
-
-    pub font_family: Option<String>,
-    pub css_injection: Option<String>,
-
-    pub page_transition_duration: Option<f64>,
 }
 
 impl IVerge {
@@ -322,7 +309,6 @@ impl IVerge {
             },
             app_log_level: Some(logging::LoggingLevel::default()),
             theme_mode: Some("system".into()),
-            theme_blur: Some(false),
             traffic_graph: Some(true),
             enable_memory_usage: Some(true),
             enable_auto_launch: Some(false),

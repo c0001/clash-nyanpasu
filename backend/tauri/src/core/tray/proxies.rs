@@ -280,7 +280,7 @@ mod platform_impl {
         let mut items = Vec::new();
         if proxies.is_empty() {
             items.push(MenuItemKind::MenuItem(
-                MenuItemBuilder::new("No Proxies")
+                MenuItemBuilder::new(t!("tray.no_proxies"))
                     .id("no_proxies")
                     .enabled(false)
                     .build(app_handle)?,
@@ -493,7 +493,7 @@ pub fn on_system_tray_event(event: &str) {
     if !event.starts_with("proxy_node_") {
         return; // bypass non-select event
     }
-    let node_id = event.split('_').last().unwrap(); // safe to unwrap
+    let node_id = event.split('_').next_back().unwrap(); // safe to unwrap
     let node_id = match node_id.parse::<usize>() {
         Ok(id) => id,
         Err(e) => {

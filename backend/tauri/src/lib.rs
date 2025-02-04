@@ -10,17 +10,25 @@ mod config;
 mod consts;
 mod core;
 mod enhance;
+mod event_handler;
 mod feat;
 mod ipc;
 mod server;
+mod setup;
 mod utils;
+mod widget;
+mod window;
+
+use std::io;
 
 use crate::{
     config::Config,
     core::handle::Handle,
     utils::{init, resolve},
 };
-use tauri::Emitter;
+use specta_typescript::{BigIntExportBehavior, Typescript};
+use tauri::{Emitter, Manager};
+use tauri_specta::{collect_commands, collect_events};
 use utils::resolve::{is_window_opened, reset_window_open_counter};
 
 rust_i18n::i18n!("../../locales");
@@ -169,85 +177,9 @@ pub fn run() -> std::io::Result<()> {
         }
     }));
 
-    let verge = { Config::verge().latest().language.clone().unwrap() };
-    rust_i18n::set_locale(verge.as_str());
-
-    // show a dialog to print the single instance error
-    let _singleton = single_instance_result.unwrap().unwrap(); // hold the guard until the end of the program
-
-    #[allow(unused_mut)]
-    let mut builder = tauri::Builder::default()
-        .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_global_shortcut::Builder::default().build())
-        .setup(|app| {
-            #[cfg(target_os = "macos")]
-            {
-                use tauri::menu::{MenuBuilder, SubmenuBuilder};
-                let submenu = SubmenuBuilder::new(app, "Edit")
-                    .undo()
-                    .redo()
-                    .copy()
-                    .paste()
-                    .cut()
-                    .select_all()
-                    .close_window()
-                    .quit()
-                    .build()
-                    .unwrap();
-                let menu = MenuBuilder::new(app).item(&submenu).build().unwrap();
-                app.set_menu(menu).unwrap();
-            }
-
-            resolve::resolve_setup(app);
-
-            // setup custom scheme
-            let handle = app.handle().clone();
-            // For start new app from schema
-            #[cfg(not(target_os = "macos"))]
-            if let Some(url) = custom_scheme {
-                log::info!(target: "app", "started with schema");
-                resolve::create_window(&handle.clone());
-                while !is_window_opened() {
-                    log::info!(target: "app", "waiting for window open");
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                }
-                Handle::global()
-                    .app_handle
-                    .lock()
-                    .as_ref()
-                    .unwrap()
-                    .emit("scheme-request-received", url.clone())
-                    .unwrap();
-            }
-            // This operation should terminate the app if app is called by custom scheme and this instance is not the primary instance
-            log_err!(tauri_plugin_deep_link::register(
-                &["clash-nyanpasu", "clash"],
-                move |request| {
-                    log::info!(target: "app", "scheme request received: {:?}", &request);
-                    resolve::create_window(&handle.clone()); // create window if not exists
-                    while !is_window_opened() {
-                        log::info!(target: "app", "waiting for window open");
-                        std::thread::sleep(std::time::Duration::from_millis(100));
-                    }
-                    handle.emit("scheme-request-received", request).unwrap();
-                }
-            ));
-            std::thread::spawn(move || {
-                nyanpasu_utils::runtime::block_on(async move {
-                    server::run(*server::SERVER_PORT)
-                        .await
-                        .expect("failed to start server");
-                });
-            });
-            Ok(())
-        })
-        .invoke_handler(tauri::generate_handler![
+    // setup specta
+    let specta_builder = tauri_specta::Builder::<tauri::Wry>::new()
+        .commands(collect_commands![
             // common
             ipc::get_sys_proxy,
             ipc::open_app_config_dir,
@@ -324,7 +256,130 @@ pub fn run() -> std::io::Result<()> {
             ipc::remove_storage_item,
             ipc::mutate_proxies,
             ipc::get_core_dir,
-        ]);
+            // clash layer
+            ipc::get_clash_ws_connections_state,
+        ])
+        .events(collect_events![core::clash::ClashConnectionsEvent]);
+
+    #[cfg(debug_assertions)]
+    {
+        const SPECTA_BINDINGS_PATH: &str = "../../frontend/interface/src/ipc/bindings.ts";
+
+        match specta_builder.export(
+            Typescript::default()
+                .formatter(specta_typescript::formatter::prettier)
+                .formatter(|file| {
+                    let npx_command = if cfg!(target_os = "windows") {
+                        "npx.cmd"
+                    } else {
+                        "npx"
+                    };
+
+                    std::process::Command::new(npx_command)
+                        .arg("prettier")
+                        .arg("--write")
+                        .arg(file)
+                        .output()
+                        .map(|_| ())
+                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+                })
+                .bigint(BigIntExportBehavior::Number)
+                .header("/* eslint-disable */\n// @ts-nocheck"),
+            SPECTA_BINDINGS_PATH,
+        ) {
+            Ok(_) => {
+                log::debug!(
+                    "Exported typescript bindings, path: {}",
+                    SPECTA_BINDINGS_PATH
+                );
+            }
+            Err(e) => {
+                panic!("Failed to export typescript bindings: {}", e);
+            }
+        };
+    }
+
+    let verge = { Config::verge().latest().language.clone().unwrap() };
+    rust_i18n::set_locale(verge.as_str());
+
+    // show a dialog to print the single instance error
+    let _singleton = single_instance_result.unwrap().unwrap(); // hold the guard until the end of the program
+
+    #[allow(unused_mut)]
+    let mut builder = tauri::Builder::default()
+        .invoke_handler(specta_builder.invoke_handler())
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_global_shortcut::Builder::default().build())
+        .setup(move |app| {
+            specta_builder.mount_events(app);
+
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::menu::{MenuBuilder, SubmenuBuilder};
+                let submenu = SubmenuBuilder::new(app, "Edit")
+                    .undo()
+                    .redo()
+                    .copy()
+                    .paste()
+                    .cut()
+                    .select_all()
+                    .close_window()
+                    .quit()
+                    .build()
+                    .unwrap();
+                let menu = MenuBuilder::new(app).item(&submenu).build().unwrap();
+                app.set_menu(menu).unwrap();
+            }
+
+            resolve::resolve_setup(app);
+
+            // setup custom scheme
+            let handle = app.handle().clone();
+            // For start new app from schema
+            #[cfg(not(target_os = "macos"))]
+            if let Some(url) = custom_scheme {
+                log::info!(target: "app", "started with schema");
+                resolve::create_window(&handle.clone());
+                while !is_window_opened() {
+                    log::info!(target: "app", "waiting for window open");
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+                Handle::global()
+                    .app_handle
+                    .lock()
+                    .as_ref()
+                    .unwrap()
+                    .emit("scheme-request-received", url.clone())
+                    .unwrap();
+            }
+            // This operation should terminate the app if app is called by custom scheme and this instance is not the primary instance
+            log_err!(tauri_plugin_deep_link::register(
+                &["clash-nyanpasu", "clash"],
+                move |request| {
+                    log::info!(target: "app", "scheme request received: {:?}", &request);
+                    resolve::create_window(&handle.clone()); // create window if not exists
+                    while !is_window_opened() {
+                        log::info!(target: "app", "waiting for window open");
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                    handle.emit("scheme-request-received", request).unwrap();
+                }
+            ));
+            std::thread::spawn(move || {
+                nyanpasu_utils::runtime::block_on(async move {
+                    server::run(*server::SERVER_PORT)
+                        .await
+                        .expect("failed to start server");
+                });
+            });
+            Ok(())
+        });
 
     let app = builder
         .build(tauri::generate_context!())
@@ -344,9 +399,7 @@ pub fn run() -> std::io::Result<()> {
                 log::debug!(target: "app", "window close requested");
                 let _ = resolve::save_window_state(app_handle, true);
                 #[cfg(target_os = "macos")]
-                log_err!(app_handle.run_on_main_thread(|| {
-                    crate::utils::dock::macos::hide_dock_icon();
-                }));
+                crate::utils::dock::macos::hide_dock_icon();
             }
             tauri::WindowEvent::Destroyed => {
                 log::debug!(target: "app", "window destroyed");
@@ -359,6 +412,10 @@ pub fn run() -> std::io::Result<()> {
             }
             _ => {}
         },
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Reopen { .. } => {
+            resolve::create_window(app_handle);
+        }
         _ => {}
     });
 

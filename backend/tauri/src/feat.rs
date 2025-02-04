@@ -7,16 +7,17 @@
 use std::borrow::Borrow;
 
 use crate::{
-    config::*,
+    config::{nyanpasu::NetworkStatisticWidgetConfig, *},
     core::{service::ipc::get_ipc_state, *},
     log_err,
     utils::{self, help::get_clash_external_port, resolve},
 };
 use anyhow::{bail, Result};
 use handle::Message;
+use nyanpasu_egui::widget::network_statistic_large;
 use nyanpasu_ipc::api::status::CoreState;
 use serde_yaml::{Mapping, Value};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 // 打开面板
@@ -285,7 +286,7 @@ pub async fn patch_verge(patch: IVerge) -> Result<()> {
     let log_level = patch.app_log_level;
     let log_max_files = patch.max_log_files;
     let enable_tray_selector = patch.clash_tray_selector;
-
+    let network_statistic_widget = patch.network_statistic_widget;
     let res = || async move {
         let service_mode = patch.enable_service_mode;
         let ipc_state = get_ipc_state();
@@ -297,7 +298,38 @@ pub async fn patch_verge(patch: IVerge) -> Result<()> {
         }
 
         if tun_mode.is_some() {
-            update_core_config().await?;
+            log::debug!(target: "app", "toggle tun mode");
+            #[allow(unused_mut)]
+            let mut flag = false;
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            {
+                use crate::utils::dirs::check_core_permission;
+                let current_core = Config::verge().data().clash_core.unwrap_or_default();
+                let current_core: nyanpasu_utils::core::CoreType = (&current_core).into();
+                let service_state = crate::core::service::ipc::get_ipc_state();
+                if !service_state.is_connected() && check_core_permission(&current_core).inspect_err(|e| {
+                    log::error!(target: "app", "clash core is not granted the necessary permissions, grant it: {e:?}");
+                }).is_ok_and(|v| !v) {
+                    log::debug!(target: "app", "grant core permission, and restart core");
+                    flag = true;
+                }
+            }
+            let (state, _, _) = CoreManager::global().status().await;
+            if flag || matches!(state.as_ref(), CoreState::Stopped(_)) {
+                log::debug!(target: "app", "core is stopped, restart core");
+                Config::generate().await?;
+                CoreManager::global().run_core().await?;
+            } else {
+                log::debug!(target: "app", "update core config");
+                #[cfg(target_os = "macos")]
+                let _ = CoreManager::global()
+                    .change_default_network_dns(tun_mode.unwrap_or(false))
+                    .await
+                    .inspect_err(
+                        |e| log::error!(target: "app", "failed to set system dns: {:?}", e),
+                    );
+                update_core_config().await?;
+            }
         }
 
         if auto_launch.is_some() {
@@ -329,6 +361,24 @@ pub async fn patch_verge(patch: IVerge) -> Result<()> {
 
         if enable_tray_selector.is_some() {
             handle::Handle::update_systray()?;
+        }
+
+        // TODO: refactor config with changed notify
+        if network_statistic_widget.is_some() {
+            let network_statistic_widget = network_statistic_widget.unwrap();
+            let widget_manager =
+                crate::consts::app_handle().state::<crate::widget::WidgetManager>();
+            let is_running = widget_manager.is_running().await;
+            match network_statistic_widget {
+                NetworkStatisticWidgetConfig::Disabled => {
+                    if is_running {
+                        widget_manager.stop().await?;
+                    }
+                }
+                NetworkStatisticWidgetConfig::Enabled(variant) => {
+                    widget_manager.start(variant).await?;
+                }
+            }
         }
 
         <Result<()>>::Ok(())

@@ -1,6 +1,5 @@
-import { atom } from "jotai";
-import type { Profile } from "@nyanpasu/interface";
+import { atom } from 'jotai'
 
-export const atomGlobalChainCurrent = atom<boolean>(false);
+export const atomGlobalChainCurrent = atom<boolean>(false)
 
-export const atomChainsSelected = atom<Profile.Item["uid"]>();
+export const atomChainsSelected = atom<string>()
