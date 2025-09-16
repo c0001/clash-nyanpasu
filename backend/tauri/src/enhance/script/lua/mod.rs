@@ -5,7 +5,7 @@ use mlua::prelude::*;
 use parking_lot::Mutex;
 use serde_yaml::{Mapping, Value};
 
-use crate::enhance::{runner::wrap_result, utils::take_logs, Logs, LogsExt};
+use crate::enhance::{Logs, LogsExt, runner::wrap_result, utils::take_logs};
 
 use super::runner::{ProcessOutput, Runner};
 
@@ -184,7 +184,7 @@ mod tests {
         let (result, logs) = tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(runner.process_honey(mapping, script));
-        eprintln!("{:?}\n{:?}", logs, result);
+        eprintln!("{logs:?}\n{result:?}");
         assert!(result.is_ok());
         assert_eq!(logs.len(), 3);
         let expected = serde_yaml::from_str::<Mapping>(expected).unwrap();

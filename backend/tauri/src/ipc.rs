@@ -1,6 +1,9 @@
 use crate::{
     config::{profile::ProfileBuilder, *},
-    core::{storage::Storage, tasks::jobs::ProfilesJobGuard, updater::ManifestVersionLatest, *},
+    core::{
+        logger::Logger, storage::Storage, tasks::jobs::ProfilesJobGuard,
+        updater::ManifestVersionLatest, *,
+    },
     enhance::PostProcessingOutput,
     feat,
     utils::{
@@ -10,7 +13,7 @@ use crate::{
         resolve::{self, save_window_state},
     },
 };
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use chrono::Local;
 use log::debug;
 use nyanpasu_ipc::api::status::CoreState;
@@ -53,7 +56,7 @@ impl serde::Serialize for IpcError {
     where
         S: serde::ser::Serializer,
     {
-        serializer.serialize_str(format!("{:#?}", self).as_str())
+        serializer.serialize_str(format!("{self:#?}").as_str())
     }
 }
 
@@ -264,6 +267,10 @@ pub async fn patch_profiles_config(profiles: ProfilesBuilder) -> Result {
             handle::Handle::refresh_clash();
             Config::profiles().apply();
             (Config::profiles().data().save_file())?;
+
+            // Interrupt connections based on configuration
+            let _ = crate::core::connection_interruption::ConnectionInterruptionService::on_profile_change().await;
+
             Ok(())
         }
         Err(err) => {
@@ -509,7 +516,7 @@ pub fn get_sys_proxy() -> Result<GetSysProxyResponse> {
 #[tauri::command]
 #[specta::specta]
 pub fn get_clash_logs() -> Result<VecDeque<String>> {
-    Ok(logger::Logger::global().get_log())
+    Ok(Logger::global().get_log())
 }
 
 #[tauri::command]
@@ -578,6 +585,7 @@ pub fn save_window_size_state() -> Result<()> {
 pub async fn fetch_latest_core_versions() -> Result<ManifestVersionLatest> {
     let mut updater = updater::UpdaterManager::global().write().await; // It is intended to block here
     (updater.fetch_latest().await)?;
+    // TODO: result key should be kebab-case
     Ok(updater.get_latest_versions())
 }
 
@@ -597,7 +605,7 @@ pub async fn get_core_version(
 #[specta::specta]
 pub async fn collect_logs(app_handle: AppHandle) -> Result {
     let now = Local::now().format("%Y-%m-%d");
-    let fname = format!("{}-log", now);
+    let fname = format!("{now}-log");
     let builder = FileDialogBuilder::new(app_handle.dialog().clone());
     builder
         .add_filter("archive files", &["zip"])
@@ -605,7 +613,7 @@ pub async fn collect_logs(app_handle: AppHandle) -> Result {
         .set_title("Save log archive")
         .save_file(|file_path| match file_path {
             Some(path) if path.as_path().is_some() => {
-                debug!("{:#?}", path);
+                debug!("{path:#?}");
                 match candy::collect_logs(path.as_path().unwrap()) {
                     Ok(_) => (),
                     Err(err) => {
@@ -684,6 +692,11 @@ pub async fn mutate_proxies() -> Result<crate::core::clash::proxies::Proxies> {
 pub async fn select_proxy(group: String, name: String) -> Result<()> {
     use crate::core::clash::proxies::{ProxiesGuard, ProxiesGuardExt};
     (ProxiesGuard::global().select_proxy(&group, &name).await)?;
+
+    // Interrupt connections based on configuration
+    let _ = crate::core::connection_interruption::ConnectionInterruptionService::on_proxy_change()
+        .await;
+
     Ok(())
 }
 
@@ -865,10 +878,8 @@ pub mod service {
                 .as_ref()
                 .unwrap_or(&false)
         };
-        if enabled_service {
-            if let Err(e) = crate::core::CoreManager::global().run_core().await {
-                log::error!(target: "app", "{e}");
-            }
+        if enabled_service && let Err(e) = crate::core::CoreManager::global().run_core().await {
+            log::error!(target: "app", "{e}");
         }
         Ok(res?)
     }
@@ -884,10 +895,8 @@ pub mod service {
                 .as_ref()
                 .unwrap_or(&false)
         };
-        if enabled_service {
-            if let Err(e) = crate::core::CoreManager::global().run_core().await {
-                log::error!(target: "app", "{e}");
-            }
+        if enabled_service && let Err(e) = crate::core::CoreManager::global().run_core().await {
+            log::error!(target: "app", "{e}");
         }
         Ok(res?)
     }
@@ -903,10 +912,8 @@ pub mod service {
                 .as_ref()
                 .unwrap_or(&false)
         };
-        if enabled_service {
-            if let Err(e) = crate::core::CoreManager::global().run_core().await {
-                log::error!(target: "app", "{e}");
-            }
+        if enabled_service && let Err(e) = crate::core::CoreManager::global().run_core().await {
+            log::error!(target: "app", "{e}");
         }
         Ok(res?)
     }
@@ -931,9 +938,9 @@ pub async fn get_service_install_prompt() -> Result<String> {
         .map(|arg| arg.to_string_lossy().to_string())
         .collect::<Vec<_>>()
         .join(" ");
-    let mut prompt = format!("./nyanpasu-service {}", args);
+    let mut prompt = format!("./nyanpasu-service {args}");
     if cfg!(not(windows)) {
-        prompt = format!("sudo {}", prompt);
+        prompt = format!("sudo {prompt}");
     }
     Ok(prompt)
 }
@@ -976,4 +983,85 @@ pub async fn get_clash_ws_connections_state(
 ) -> Result<crate::core::clash::ws::ClashConnectionsConnectorState> {
     let ws_connector = app_handle.state::<crate::core::clash::ws::ClashConnectionsConnector>();
     Ok(ws_connector.state())
+}
+
+// Updater block
+
+#[derive(Default, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
+// TODO: a copied from updater metadata, and should be moved a separate updater module
+pub struct UpdateWrapper {
+    rid: tauri::ResourceId,
+    available: bool,
+    current_version: String,
+    version: String,
+    date: Option<String>,
+    body: Option<String>,
+    raw_json: serde_json::Value,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn check_update(webview: tauri::Webview) -> Result<Option<UpdateWrapper>> {
+    use crate::utils::config::{get_self_proxy, get_system_proxy};
+    use std::cmp::Ordering;
+    use tauri_plugin_updater::UpdaterExt;
+
+    let build_time = time::OffsetDateTime::parse(
+        crate::consts::BUILD_INFO.build_date,
+        &time::format_description::well_known::Rfc3339,
+    )
+    .context("failed to parse build time")?;
+    let mut builder = webview
+        .updater_builder()
+        .version_comparator(move |_, remote| {
+            use semver::Version;
+            let local = Version::parse(crate::consts::BUILD_INFO.pkg_version).ok();
+            log::trace!("[check] local: {:?}, remote: {:?}", local, remote.version);
+            match local {
+                Some(local) => {
+                    if !local.build.is_empty() && !remote.version.build.is_empty() {
+                        // ignore build info to compare the version directly
+                        match local.cmp_precedence(&remote.version) {
+                            Ordering::Less => true,
+                            Ordering::Equal => match remote.pub_date {
+                                // prefer newer build if pub_date is available
+                                Some(pub_date) => {
+                                    local.build != remote.version.build && pub_date > build_time
+                                }
+                                None => local.build != remote.version.build,
+                            },
+                            Ordering::Greater => false,
+                        }
+                    } else {
+                        local < remote.version
+                    }
+                }
+                None => false,
+            }
+        });
+    // apply proxy
+    if let Ok(proxy) = get_self_proxy() {
+        builder = builder.proxy(proxy.parse().context("failed to parse proxy")?);
+    }
+    if let Ok(Some(proxy)) = get_system_proxy() {
+        builder = builder.proxy(proxy.parse().context("failed to parse system proxy")?);
+    }
+    let updater = builder.build().context("failed to build updater")?;
+    let update = updater.check().await.context("failed to check update")?;
+    Ok(update.map(|u| {
+        let mut wrapper = UpdateWrapper {
+            available: true,
+            current_version: u.current_version.clone(),
+            version: u.version.clone(),
+            date: u.date.and_then(|d| {
+                d.format(&time::format_description::well_known::Rfc3339)
+                    .ok()
+            }),
+            body: u.body.clone(),
+            raw_json: u.raw_json.clone(),
+            ..Default::default()
+        };
+        wrapper.rid = webview.resources_table().add(u);
+        wrapper
+    }))
 }

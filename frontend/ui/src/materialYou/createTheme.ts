@@ -1,13 +1,12 @@
+import { RecursivePartial } from '@/utils'
 import {
   argbFromHex,
   hexFromArgb,
   themeFromSourceColor,
 } from '@material/material-color-utilities'
-import { createTheme } from '@mui/material/styles'
-import createPalette from '@mui/material/styles/createPalette'
+import { createTheme, Palette } from '@mui/material/styles'
 import {
   MuiButton,
-  MuiButtonGroup,
   MuiCard,
   MuiCardContent,
   MuiDialog,
@@ -18,29 +17,15 @@ import {
   MuiMenu,
   MuiPaper,
   MuiSwitch,
+  MuiToggleButtonGroup,
 } from './themeComponents'
 import { MUI_BREAKPOINTS } from './themeConsts.mjs'
 
-interface ThemeSchema {
-  primary_color: string
-  secondary_color: string
-  primary_text: string
-  secondary_text: string
-  info_color: string
-  error_color: string
-  warning_color: string
-  success_color: string
-  font_family?: string
-}
-
-export const createMDYTheme = (themeSchema: ThemeSchema) => {
-  const materialColor = themeFromSourceColor(
-    argbFromHex(themeSchema.primary_color),
-  )
+export const createMDYTheme = (color: string, fontFamily?: string) => {
+  const materialColor = themeFromSourceColor(argbFromHex(color))
 
   const generatePalette = (mode: 'light' | 'dark') => {
-    return createPalette({
-      mode,
+    return {
       primary: {
         main: hexFromArgb(materialColor.schemes[mode].primary),
       },
@@ -56,7 +41,7 @@ export const createMDYTheme = (themeSchema: ThemeSchema) => {
           materialColor.schemes[mode].onSecondaryContainer,
         ),
       },
-    })
+    } satisfies RecursivePartial<Palette>
   }
   const colorSchemes = {
     light: {
@@ -77,11 +62,11 @@ export const createMDYTheme = (themeSchema: ThemeSchema) => {
         dark: true,
       },
       typography: {
-        fontFamily: themeSchema?.font_family,
+        fontFamily,
       },
       components: {
         MuiButton,
-        MuiButtonGroup,
+        MuiToggleButtonGroup,
         MuiCard,
         MuiCardContent,
         MuiDialog,

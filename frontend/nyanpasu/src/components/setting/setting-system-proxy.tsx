@@ -1,9 +1,10 @@
 import { useLockFn } from 'ahooks'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { formatError } from '@/utils'
 import { message } from '@/utils/notification'
 import { InputAdornment, List, ListItem } from '@mui/material'
-import Grid from '@mui/material/Grid2'
+import Grid from '@mui/material/Grid'
 import { useSetting, useSystemProxy } from '@nyanpasu/interface'
 import {
   BaseCard,
@@ -24,7 +25,7 @@ const TunModeButton = () => {
     try {
       await tunMode.upsert(!tunMode.value)
     } catch (error) {
-      message(`Activation TUN Mode failed!`, {
+      message(`Activation TUN Mode failed! \n Error: ${formatError(error)}`, {
         title: t('Error'),
         kind: 'error',
       })
@@ -118,6 +119,9 @@ const ProxyGuardInterval = () => {
   )
 }
 
+const DEFAULT_BYPASS =
+  'localhost;127.;192.168.;10.;172.16.;172.17.;172.18.;172.19.;172.20.;172.21.;172.22.;172.23.;172.24.;172.25.;172.26.;172.27.;172.28.;172.29.;172.30.;172.31.*'
+
 const SystemProxyBypass = () => {
   const { t } = useTranslation()
 
@@ -128,7 +132,13 @@ const SystemProxyBypass = () => {
       label={t('Proxy Bypass')}
       value={systemProxyBypass.data || ''}
       onApply={(value) => {
-        systemProxyBypass.upsert(value)
+        if (!value || value.trim() === '') {
+          // 输入为空 → 重置为默认规则
+          systemProxyBypass.upsert(DEFAULT_BYPASS)
+        } else {
+          // 正常写入用户配置
+          systemProxyBypass.upsert(value)
+        }
       }}
     />
   )

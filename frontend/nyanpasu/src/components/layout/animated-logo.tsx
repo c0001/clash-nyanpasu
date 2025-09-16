@@ -1,7 +1,12 @@
-import { AnimatePresence, motion, Variants } from 'framer-motion'
+import {
+  AnimatePresence,
+  motion,
+  type Transition,
+  type Variants,
+} from 'framer-motion'
 import { CSSProperties } from 'react'
 import LogoSvg from '@/assets/image/logo.svg?react'
-import { useNyanpasu } from '@nyanpasu/interface'
+import { useSetting } from '@nyanpasu/interface'
 import { cn } from '@nyanpasu/ui'
 import styles from './animated-logo.module.scss'
 
@@ -11,7 +16,7 @@ const transition = {
   type: 'spring',
   stiffness: 260,
   damping: 20,
-}
+} satisfies Transition
 
 const motionVariants: { [name: string]: Variants } = {
   default: {
@@ -51,9 +56,9 @@ export default function AnimatedLogo({
   style?: CSSProperties
   disableMotion?: boolean
 }) {
-  const { nyanpasuConfig } = useNyanpasu()
+  const { value } = useSetting('lighten_animation_effects')
 
-  const disable = disableMotion ?? nyanpasuConfig?.lighten_animation_effects
+  const disable = disableMotion ?? value
 
   return (
     <AnimatePresence initial={false}>

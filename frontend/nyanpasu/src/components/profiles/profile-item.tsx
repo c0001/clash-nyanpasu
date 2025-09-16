@@ -3,6 +3,7 @@ import dayjs from 'dayjs'
 import { AnimatePresence, motion } from 'framer-motion'
 import { memo, use, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { formatError } from '@/utils'
 import { message } from '@/utils/notification'
 import parseTraffic from '@/utils/parse-traffic'
 import {
@@ -13,9 +14,7 @@ import {
   Terminal,
   Update,
 } from '@mui/icons-material'
-import LoadingButton from '@mui/lab/LoadingButton'
 import {
-  alpha,
   Badge,
   Button,
   Chip,
@@ -24,17 +23,16 @@ import {
   MenuItem,
   Paper,
   Tooltip,
-  useTheme,
 } from '@mui/material'
 import {
   Profile,
   ProfileQueryResultItem,
   RemoteProfile,
-  RemoteProfileOptions,
-  useClash,
+  RemoteProfileOptionsBuilder,
+  useClashConnections,
   useProfile,
 } from '@nyanpasu/interface'
-import { cleanDeepClickEvent, cn } from '@nyanpasu/ui'
+import { alpha, cleanDeepClickEvent, cn } from '@nyanpasu/ui'
 import { ProfileDialog } from './profile-dialog'
 import { GlobalUpdatePendingContext } from './provider'
 
@@ -58,9 +56,7 @@ export const ProfileItem = memo(function ProfileItem({
 }: ProfileItemProps) {
   const { t } = useTranslation()
 
-  const { palette } = useTheme()
-
-  const { deleteConnections } = useClash()
+  const { deleteConnections } = useClashConnections()
 
   const { upsert } = useProfile()
 
@@ -107,7 +103,7 @@ export const ProfileItem = memo(function ProfileItem({
 
       await upsert.mutateAsync({ current: [item.uid] })
 
-      await deleteConnections()
+      await deleteConnections.mutateAsync(undefined)
     } catch (err) {
       const isFetchError = err instanceof Error && err.name === 'FetchError'
       message(
@@ -130,10 +126,11 @@ export const ProfileItem = memo(function ProfileItem({
     // TODO: define backend serde(option) to move null
     const selfOption = 'option' in item ? item.option : undefined
 
-    const options: RemoteProfileOptions = {
+    const options: RemoteProfileOptionsBuilder = {
       with_proxy: false,
       self_proxy: false,
       update_interval: 0,
+      user_agent: null,
       ...selfOption,
     }
 
@@ -150,7 +147,12 @@ export const ProfileItem = memo(function ProfileItem({
     try {
       setLoading({ update: true })
 
-      await item?.update?.(item)
+      await item?.update?.(options)
+    } catch (e) {
+      message(`Update failed: \n ${formatError(e)}`, {
+        title: t('Error'),
+        kind: 'error',
+      })
     } finally {
       setLoading({ update: false })
     }
@@ -220,13 +222,11 @@ export const ProfileItem = memo(function ProfileItem({
           {
             borderRadius: 6,
           },
-          selected
-            ? {
-                backgroundColor: alpha(palette.primary.main, 0.2),
-              }
-            : {
-                backgroundColor: null,
-              },
+          (theme) => ({
+            backgroundColor: selected
+              ? alpha(theme.vars.palette.primary.main, 0.2)
+              : null,
+          }),
         ]}
       >
         <div
@@ -245,9 +245,9 @@ export const ProfileItem = memo(function ProfileItem({
             {selected && (
               <FiberManualRecord
                 className="top-0 mr-auto !size-3 animate-bounce"
-                sx={{
-                  fill: palette.success.main,
-                }}
+                sx={(theme) => ({
+                  fill: theme.vars.palette.success.main,
+                })}
               />
             )}
 
@@ -317,7 +317,7 @@ export const ProfileItem = memo(function ProfileItem({
 
             {isRemote && (
               <Tooltip title={t('Update')}>
-                <LoadingButton
+                <Button
                   size="small"
                   variant="outlined"
                   className="!size-8 !min-w-0"
@@ -328,7 +328,7 @@ export const ProfileItem = memo(function ProfileItem({
                   loading={globalUpdatePending || loading.update}
                 >
                   <Update />
-                </LoadingButton>
+                </Button>
               </Tooltip>
             )}
 

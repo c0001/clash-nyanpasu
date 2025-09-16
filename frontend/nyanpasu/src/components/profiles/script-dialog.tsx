@@ -8,7 +8,6 @@ import { Divider } from '@mui/material'
 import {
   Profile,
   ProfileTemplate,
-  useClash,
   useProfile,
   useProfileContent,
 } from '@nyanpasu/interface'
@@ -69,10 +68,7 @@ export const ScriptDialog = ({
 }: ScriptDialogProps) => {
   const { t } = useTranslation()
 
-  // const { getProfileFile, setProfileFile, createProfile, setProfiles } =
-  //   useClash()
-
-  const { create, update } = useProfile()
+  const { create, patch } = useProfile()
 
   const contentFn = useProfileContent(profile?.uid ?? '')
 
@@ -129,7 +125,7 @@ export const ScriptDialog = ({
     try {
       if (isEdit) {
         await contentFn.upsert.mutateAsync(editorValue)
-        await update.mutateAsync({
+        await patch.mutateAsync({
           uid: data.uid,
           profile: data,
         })
@@ -149,9 +145,9 @@ export const ScriptDialog = ({
 
   useAsyncEffect(async () => {
     if (isEdit) {
-      await contentFn.query.refetch()
+      const result = await contentFn.query.refetch()
 
-      editor.value = contentFn.query.data ?? ''
+      editor.value = result.data ?? ''
       editor.language = getLanguage(profile!.type)!
     } else {
       editor.value = ProfileTemplate.merge
@@ -195,7 +191,7 @@ export const ScriptDialog = ({
   return (
     <BaseDialog
       title={
-        <div className="flex gap-2">
+        <div className="flex gap-2" data-tauri-drag-region>
           <span>{isEdit ? t('Edit Script') : t('New Script')}</span>
 
           <LanguageChip
@@ -253,7 +249,7 @@ export const ScriptDialog = ({
         <Divider orientation="vertical" />
 
         <Suspense fallback={null}>
-          {openMonaco && (
+          {openMonaco && !contentFn.query.isPending && (
             <ProfileMonacoViewer
               className="w-full"
               value={editor.value}

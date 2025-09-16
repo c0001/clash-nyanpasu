@@ -10,19 +10,18 @@ import { message } from '@/utils/notification'
 import parseTraffic from '@/utils/parse-traffic'
 import FiberManualRecord from '@mui/icons-material/FiberManualRecord'
 import Update from '@mui/icons-material/Update'
-import LoadingButton from '@mui/lab/LoadingButton'
+import { Box, Button } from '@mui/material'
 import ListItem from '@mui/material/ListItem'
 import ListItemButton from '@mui/material/ListItemButton'
-import { alpha, useTheme } from '@mui/material/styles'
 import Tooltip from '@mui/material/Tooltip'
 import {
   ClashCore,
-  Core,
+  ClashCoresDetail,
   InspectUpdater,
   inspectUpdater,
-  useNyanpasu,
+  useClashCores,
 } from '@nyanpasu/interface'
-import { cleanDeepClickEvent, cn } from '@nyanpasu/ui'
+import { alpha, cleanDeepClickEvent, cn } from '@nyanpasu/ui'
 
 export const getImage = (core: ClashCore) => {
   switch (core) {
@@ -56,8 +55,6 @@ const CardProgress = ({
   data?: InspectUpdater
   show?: boolean
 }) => {
-  const { palette } = useTheme()
-
   const parsedState = () => {
     if (data?.downloader?.state) {
       return 'waiting'
@@ -69,14 +66,15 @@ const CardProgress = ({
   }
 
   return (
-    <motion.div
+    <Box
+      component={motion.div}
       className={cn(
         'absolute top-0 left-0 z-10 h-full w-full rounded-2xl backdrop-blur',
         'flex flex-col items-center justify-center gap-2',
       )}
-      style={{
-        backgroundColor: alpha(palette.primary.main, 0.3),
-      }}
+      sx={(theme) => ({
+        backgroundColor: alpha(theme.vars.palette.primary.main, 0.3),
+      })}
       animate={show ? 'open' : 'closed'}
       initial={{ opacity: 0 }}
       variants={{
@@ -92,12 +90,12 @@ const CardProgress = ({
         },
       }}
     >
-      <div
+      <Box
         className="absolute left-0 h-full rounded-2xl transition-all"
-        style={{
-          backgroundColor: alpha(palette.primary.main, 0.3),
+        sx={(theme) => ({
+          backgroundColor: alpha(theme.vars.palette.primary.main, 0.3),
           width: `${calcProgress(data) < 10 ? 10 : calcProgress(data)}%`,
-        }}
+        })}
       />
 
       <div className="truncate capitalize">{parsedState()}</div>
@@ -106,13 +104,14 @@ const CardProgress = ({
         {calcProgress(data).toFixed(0)}%{''}
         <span>({parseTraffic(data?.downloader.speed || 0)}/s)</span>
       </div>
-    </motion.div>
+    </Box>
   )
 }
 
 export interface ClashCoreItemProps {
   selected: boolean
-  data: Core
+  data: ClashCoresDetail
+  core: ClashCore
   onClick: (core: ClashCore) => void
 }
 
@@ -132,15 +131,16 @@ export interface ClashCoreItemProps {
 export const ClashCoreItem = ({
   selected,
   data,
+  core,
   onClick,
 }: ClashCoreItemProps) => {
   const { t } = useTranslation()
 
-  const { palette } = useTheme()
+  const { query, updateCore } = useClashCores()
 
-  const { updateCore, getClashCore } = useNyanpasu()
-
-  const haveNewVersion = data.latest ? data.latest !== data.version : false
+  const haveNewVersion = data.latestVersion
+    ? data.latestVersion !== data.currentVersion
+    : false
 
   const [downloadState, setDownloadState] = useState(false)
 
@@ -150,7 +150,11 @@ export const ClashCoreItem = ({
     try {
       setDownloadState(true)
 
-      const updaterId = await updateCore(data.core)
+      const updaterId = await updateCore.mutateAsync(core)
+
+      if (!updaterId) {
+        throw new Error('Failed to update')
+      }
 
       await new Promise<void>((resolve, reject) => {
         const interval = setInterval(async () => {
@@ -176,7 +180,7 @@ export const ClashCoreItem = ({
         }, 100)
       })
 
-      getClashCore.mutate()
+      await query.refetch()
 
       message(t('Successfully updated the core', { core: `${data.name}` }), {
         kind: 'info',
@@ -196,25 +200,25 @@ export const ClashCoreItem = ({
     <ListItem sx={{ pl: 0, pr: 0 }}>
       <ListItemButton
         className="!relative !p-0"
-        sx={{
+        sx={(theme) => ({
           borderRadius: '16px',
-          backgroundColor: alpha(palette.background.paper, 0.3),
+          backgroundColor: alpha(theme.vars.palette.background.paper, 0.3),
 
           '&.Mui-selected': {
-            backgroundColor: alpha(palette.primary.main, 0.3),
+            backgroundColor: alpha(theme.vars.palette.primary.main, 0.3),
           },
-        }}
+        })}
         selected={selected}
         onClick={() => {
           if (!downloadState) {
-            onClick(data.core)
+            onClick(core)
           }
         }}
       >
         <CardProgress data={updater} show={downloadState} />
 
         <div className="flex w-full items-center gap-2 p-4">
-          <img style={{ width: '64px' }} src={getImage(data.core)} />
+          <img style={{ width: '64px' }} src={getImage(core)} />
 
           <div className="flex-1">
             <div className="truncate font-bold">
@@ -222,21 +226,24 @@ export const ClashCoreItem = ({
 
               {haveNewVersion && (
                 <FiberManualRecord
-                  sx={{ height: 10, fill: palette.success.main }}
+                  sx={(theme) => ({
+                    height: 10,
+                    fill: theme.vars.palette.success.main,
+                  })}
                 />
               )}
             </div>
 
-            <div className="truncate text-sm">{data.version}</div>
+            <div className="truncate text-sm">{data.currentVersion}</div>
 
             {haveNewVersion && (
-              <div className="truncate text-sm">New: {data.latest}</div>
+              <div className="truncate text-sm">New: {data.latestVersion}</div>
             )}
           </div>
 
           {haveNewVersion && (
             <Tooltip title={t('Update Core')}>
-              <LoadingButton
+              <Button
                 variant="text"
                 className="!size-8 !min-w-0"
                 loading={downloadState}
@@ -246,7 +253,7 @@ export const ClashCoreItem = ({
                 }}
               >
                 <Update />
-              </LoadingButton>
+              </Button>
             </Tooltip>
           )}
         </div>

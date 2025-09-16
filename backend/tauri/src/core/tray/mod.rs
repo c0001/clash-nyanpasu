@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use crate::{
-    config::{nyanpasu::ClashCore, Config},
+    config::{Config, nyanpasu::ClashCore},
     feat, ipc, log_err,
     utils::{help, resolve},
 };
@@ -10,9 +10,9 @@ use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use rust_i18n::t;
 use tauri::{
+    AppHandle, Manager, Runtime,
     menu::{Menu, MenuBuilder, MenuEvent, MenuItemBuilder, SubmenuBuilder},
     tray::{MouseButton, TrayIcon, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, Runtime,
 };
 use tracing_attributes::instrument;
 
@@ -186,7 +186,7 @@ impl Tray {
                     .text("restart_clash", t!("tray.more.restart_clash"))
                     .text("restart_app", t!("tray.more.restart_app"))
                     .item(
-                        &MenuItemBuilder::new(format!("Version {}", version))
+                        &MenuItemBuilder::new(format!("Version {version}"))
                             .id("app_version")
                             .enabled(false)
                             .build(app_handle)?,
@@ -307,7 +307,9 @@ impl Tray {
         };
         let tray_id = get_tray_id();
         tracing::debug!("updating tray part: {}", tray_id);
-        let tray = app_handle.tray_by_id(tray_id.as_ref()).unwrap();
+        let tray = app_handle
+            .tray_by_id(tray_id.as_ref())
+            .expect("tray not found");
         let state = app_handle.state::<TrayState<R>>();
         let menu = state.menu.lock();
 

@@ -1,5 +1,6 @@
 import { memo, useState } from 'react'
-import { useColorForDelay } from '@/hooks/theme'
+import { useColorSxForDelay } from '@/hooks/theme'
+import { mergeSxProps } from '@/utils/mui-theme'
 import { Bolt } from '@mui/icons-material'
 import { CircularProgress } from '@mui/material'
 import { cn } from '@nyanpasu/ui'
@@ -29,16 +30,18 @@ export const DelayChip = memo(function DelayChip({
   return (
     <FeatureChip
       className={cn(className, loading && '!visible')}
-      sx={{
-        ml: 'auto',
-        color: useColorForDelay(delay),
-      }}
+      sx={mergeSxProps(
+        {
+          ml: 'auto',
+        },
+        useColorSxForDelay(delay),
+      )}
       label={
         <>
           <span
             className={cn(
               'flex items-center px-[1px] transition-opacity',
-              loading ? 'opacity-0' : 'opacity-1',
+              loading ? 'opacity-0' : 'opacity-100',
             )}
           >
             {delay === -1 ? (
@@ -61,7 +64,7 @@ export const DelayChip = memo(function DelayChip({
               'left-0',
               'right-0',
               'm-auto',
-              loading ? 'opacity-1' : 'opacity-0',
+              loading ? 'opacity-100' : 'opacity-0',
             )}
           />
         </>

@@ -7,9 +7,10 @@ import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
 import Paper, { PaperProps } from '@mui/material/Paper'
-import { alpha, styled } from '@mui/material/styles'
+import { styled } from '@mui/material/styles'
 import Typography from '@mui/material/Typography'
 import { openThat } from '@nyanpasu/interface'
+import { alpha } from '@nyanpasu/ui'
 
 /**
  * @example
@@ -121,7 +122,7 @@ export const openWebUrl = (
  * @copyright LibNyanpasu org. 2024
  */
 export const Item = styled(Paper)<PaperProps>(({ theme }) => ({
-  backgroundColor: alpha(theme.palette.primary.main, 0.1),
+  backgroundColor: alpha(theme.vars.palette.primary.main, 0.1),
   padding: 16,
   borderRadius: 16,
   display: 'flex',

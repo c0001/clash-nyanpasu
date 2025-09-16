@@ -25,10 +25,9 @@ import { formatError } from '@/utils'
 import { message } from '@/utils/notification'
 import { Public, Update } from '@mui/icons-material'
 import { Badge, Button, CircularProgress, IconButton } from '@mui/material'
-import Grid from '@mui/material/Grid2'
+import Grid from '@mui/material/Grid'
 import {
   RemoteProfileOptionsBuilder,
-  useClash,
   useProfile,
   type RemoteProfile,
 } from '@nyanpasu/interface'
@@ -50,51 +49,50 @@ export const Route = createFileRoute('/profiles')({
 function ProfilePage() {
   const { t } = useTranslation()
 
-  const { getRuntimeLogs } = useClash()
-
   const { query, update } = useProfile()
 
   const profiles = useMemo(() => {
     return filterProfiles(query.data?.items)
   }, [query.data?.items])
 
-  const maxLogLevelTriggered = useMemo(() => {
-    const currentProfileChains =
-      (
-        query.data?.items?.find(
-          // TODO: 支持多 Profile
-          (item) => query.data?.current?.[0] === item.uid,
-          // TODO: fix any type
-        ) as any
-      )?.chain || []
-    return Object.entries(getRuntimeLogs.data || {}).reduce(
-      (acc, [key, value]) => {
-        const accKey = currentProfileChains.includes(key) ? 'current' : 'global'
-        if (acc[accKey] === 'error') {
-          return acc
-        }
-        for (const log of value) {
-          switch (log[0]) {
-            case 'error':
-              return { ...acc, [accKey]: 'error' }
-            case 'warn':
-              acc = { ...acc, [accKey]: 'warn' }
-              break
-            case 'info':
-              if (acc[accKey] !== 'warn') {
-                acc = { ...acc, [accKey]: 'info' }
-              }
-              break
-          }
-        }
-        return acc
-      },
-      {} as {
-        global: undefined | 'info' | 'error' | 'warn'
-        current: undefined | 'info' | 'error' | 'warn'
-      },
-    )
-  }, [query.data, getRuntimeLogs.data])
+  // TODO: fix me
+  // const maxLogLevelTriggered = useMemo(() => {
+  //   const currentProfileChains =
+  //     (
+  //       query.data?.items?.find(
+  //         // TODO: 支持多 Profile
+  //         (item) => query.data?.current?.[0] === item.uid,
+  //         // TODO: fix any type
+  //       ) as any
+  //     )?.chain || []
+  //   return Object.entries(getRuntimeLogs.data || {}).reduce(
+  //     (acc, [key, value]) => {
+  //       const accKey = currentProfileChains.includes(key) ? 'current' : 'global'
+  //       if (acc[accKey] === 'error') {
+  //         return acc
+  //       }
+  //       for (const log of value) {
+  //         switch (log[0]) {
+  //           case 'error':
+  //             return { ...acc, [accKey]: 'error' }
+  //           case 'warn':
+  //             acc = { ...acc, [accKey]: 'warn' }
+  //             break
+  //           case 'info':
+  //             if (acc[accKey] !== 'warn') {
+  //               acc = { ...acc, [accKey]: 'info' }
+  //             }
+  //             break
+  //         }
+  //       }
+  //       return acc
+  //     },
+  //     {} as {
+  //       global: undefined | 'info' | 'error' | 'warn'
+  //       current: undefined | 'info' | 'error' | 'warn'
+  //     },
+  //   )
+  // }, [query.data, getRuntimeLogs.data])
 
   const [globalChain, setGlobalChain] = useAtom(atomGlobalChainCurrent)
 
@@ -158,10 +156,7 @@ function ProfilePage() {
 
         const result = await update.mutateAsync({
           uid: profile.uid,
-          profile: {
-            ...profile,
-            option,
-          },
+          option,
         })
         updates.push(Promise.resolve(result || undefined))
       }
@@ -195,20 +190,20 @@ function ProfilePage() {
           >
             <MdiTextBoxCheckOutline
             // style={{
-            //   color: theme.palette.text.primary,
+            //   color: theme.vars.palette.text.primary,
             // }}
             />
           </IconButton>
           <Badge
             variant="dot"
-            color={
-              maxLogLevelTriggered.global === 'error'
-                ? 'error'
-                : maxLogLevelTriggered.global === 'warn'
-                  ? 'warning'
-                  : 'primary'
-            }
-            invisible={!maxLogLevelTriggered.global}
+            // color={
+            //   maxLogLevelTriggered.global === 'error'
+            //     ? 'error'
+            //     : maxLogLevelTriggered.global === 'warn'
+            //       ? 'warning'
+            //       : 'primary'
+            // }
+            // invisible={!maxLogLevelTriggered.global}
           >
             <Button
               size="small"
@@ -251,7 +246,7 @@ function ProfilePage() {
                         item={item}
                         onClickChains={onClickChains}
                         selected={query.data?.current?.includes(item.uid)}
-                        maxLogLevelTriggered={maxLogLevelTriggered}
+                        // maxLogLevelTriggered={maxLogLevelTriggered}
                         chainsSelected={chainsSelected === item.uid}
                       />
                     </motion.div>
@@ -264,20 +259,20 @@ function ProfilePage() {
       </AnimatePresence>
 
       <AddProfileContext.Provider value={addProfileCtxValue}>
-        <div className="fixed right-8 bottom-8">
+        <div className="!fixed right-8 bottom-8">
           <FloatingButton
-            className="relative -top-3 -right-2.5 flex size-11 min-w-fit"
+            className="!relative -top-15 -right-13.5 flex size-11 !min-w-fit"
             sx={[
               (theme) => ({
-                backgroundColor: theme.palette.grey[200],
+                backgroundColor: theme.vars.palette.grey[200],
                 boxShadow: 4,
                 '&:hover': {
-                  backgroundColor: theme.palette.grey[300],
+                  backgroundColor: theme.vars.palette.grey[300],
                 },
                 ...theme.applyStyles('dark', {
-                  backgroundColor: theme.palette.grey[800],
+                  backgroundColor: theme.vars.palette.grey[800],
                   '&:hover': {
-                    backgroundColor: theme.palette.grey[700],
+                    backgroundColor: theme.vars.palette.grey[700],
                   },
                 }),
               }),
@@ -286,7 +281,7 @@ function ProfilePage() {
           >
             {globalUpdatePending ? <CircularProgress size={22} /> : <Update />}
           </FloatingButton>
-          <NewProfileButton className="static" />
+          <NewProfileButton className="!static" />
         </div>
       </AddProfileContext.Provider>
     </SidePage>

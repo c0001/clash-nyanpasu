@@ -1,27 +1,27 @@
 import { useMemoizedFn } from 'ahooks'
-import { ChangeEvent, useTransition } from 'react'
+import { useTransition } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatError } from '@/utils'
 import { message } from '@/utils/notification'
-import { LoadingButton } from '@mui/lab'
 import { Button, List, ListItem, ListItemText, Typography } from '@mui/material'
-import { restartSidecar, useNyanpasu } from '@nyanpasu/interface'
+import {
+  restartSidecar,
+  useSetting,
+  useSystemService,
+} from '@nyanpasu/interface'
 import { BaseCard, SwitchItem } from '@nyanpasu/ui'
-import { nyanpasu } from './modules/create-props'
 import {
   ServerManualPromptDialogWrapper,
   useServerManualPromptDialog,
 } from './modules/service-manual-prompt-dialog'
 
-const { useBooleanProps: createBooleanProps } = nyanpasu
-
 export const SettingSystemService = () => {
   const { t } = useTranslation()
 
-  const { getServiceStatus, setServiceStatus } = useNyanpasu()
+  const { query, upsert } = useSystemService()
 
   const getInstallButtonString = () => {
-    switch (getServiceStatus.data) {
+    switch (query.data?.status) {
       case 'running':
       case 'stopped': {
         return t('uninstall')
@@ -33,7 +33,7 @@ export const SettingSystemService = () => {
     }
   }
   const getControlButtonString = () => {
-    switch (getServiceStatus.data) {
+    switch (query.data?.status) {
       case 'running': {
         return t('stop')
       }
@@ -44,7 +44,7 @@ export const SettingSystemService = () => {
     }
   }
 
-  const isDisabled = getServiceStatus.data === 'not_installed'
+  const isDisabled = query.data?.status === 'not_installed'
 
   const promptDialog = useServerManualPromptDialog()
 
@@ -52,14 +52,14 @@ export const SettingSystemService = () => {
   const handleInstallClick = useMemoizedFn(() => {
     startInstallOrUninstall(async () => {
       try {
-        switch (getServiceStatus.data) {
+        switch (query.data?.status) {
           case 'running':
           case 'stopped':
-            await setServiceStatus('uninstall')
+            await upsert.mutateAsync('uninstall')
             break
 
           case 'not_installed':
-            await setServiceStatus('install')
+            await upsert.mutateAsync('install')
             break
 
           default:
@@ -68,7 +68,7 @@ export const SettingSystemService = () => {
         await restartSidecar()
       } catch (e) {
         const errorMessage = `${
-          getServiceStatus.data === 'not_installed'
+          query.data?.status === 'not_installed'
             ? t('Failed to install')
             : t('Failed to uninstall')
         }: ${formatError(e)}`
@@ -79,7 +79,7 @@ export const SettingSystemService = () => {
         })
         // If the installation fails, prompt the user to manually install the service
         promptDialog.show(
-          getServiceStatus.data === 'not_installed' ? 'install' : 'uninstall',
+          query.data?.status === 'not_installed' ? 'install' : 'uninstall',
         )
       }
     })
@@ -89,13 +89,13 @@ export const SettingSystemService = () => {
   const handleControlClick = useMemoizedFn(() => {
     startServiceControl(async () => {
       try {
-        switch (getServiceStatus.data) {
+        switch (query.data?.status) {
           case 'running':
-            await setServiceStatus('stop')
+            await upsert.mutateAsync('stop')
             break
 
           case 'stopped':
-            await setServiceStatus('start')
+            await upsert.mutateAsync('start')
             break
 
           default:
@@ -104,7 +104,7 @@ export const SettingSystemService = () => {
         await restartSidecar()
       } catch (e) {
         const errorMessage =
-          getServiceStatus.data === 'running'
+          query.data?.status === 'running'
             ? `Stop failed: ${formatError(e)}`
             : `Start failed: ${formatError(e)}`
 
@@ -113,20 +113,12 @@ export const SettingSystemService = () => {
           title: t('Error'),
         })
         // If start failed show a prompt to user to start the service manually
-        promptDialog.show(
-          getServiceStatus.data === 'running' ? 'stop' : 'start',
-        )
+        promptDialog.show(query.data?.status === 'running' ? 'stop' : 'start')
       }
     })
   })
-  const serviceToggleProps = createBooleanProps('enable_service_mode')
-  const onChange = async (
-    event: ChangeEvent<HTMLInputElement>,
-    checked: boolean,
-  ) => {
-    await serviceToggleProps.onChange?.(event, checked)
-    await restartSidecar()
-  }
+
+  const serviceMode = useSetting('enable_service_mode')
 
   return (
     <BaseCard label={t('System Service')}>
@@ -135,8 +127,8 @@ export const SettingSystemService = () => {
         <SwitchItem
           label={t('Service Mode')}
           disabled={isDisabled}
-          {...serviceToggleProps}
-          onChange={onChange}
+          checked={serviceMode.value || false}
+          onChange={() => serviceMode.upsert(!serviceMode.value)}
         />
 
         {isDisabled && (
@@ -152,29 +144,29 @@ export const SettingSystemService = () => {
         <ListItem sx={{ pl: 0, pr: 0 }}>
           <ListItemText
             primary={t('Current Status', {
-              status: t(`${getServiceStatus.data}`),
+              status: t(`${query.data?.status}`),
             })}
           />
           <div className="flex gap-2">
             {!isDisabled && (
-              <LoadingButton
+              <Button
                 variant="contained"
                 onClick={handleControlClick}
                 loading={serviceControlPending}
                 disabled={installOrUninstallPending || serviceControlPending}
               >
                 {getControlButtonString()}
-              </LoadingButton>
+              </Button>
             )}
 
-            <LoadingButton
+            <Button
               variant="contained"
               onClick={handleInstallClick}
               loading={installOrUninstallPending}
               disabled={installOrUninstallPending || serviceControlPending}
             >
               {getInstallButtonString()}
-            </LoadingButton>
+            </Button>
 
             {import.meta.env.DEV && (
               <Button

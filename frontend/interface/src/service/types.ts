@@ -1,5 +1,3 @@
-import { Clash } from './clash'
-
 export interface VergeConfig {
   app_log_level?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | string
   language?: string
@@ -54,19 +52,11 @@ export interface VergeConfig {
   always_on_top?: boolean
 }
 
-export interface ClashConfig {
-  port: number
-  mode: string
-  ipv6: boolean
-  'socket-port': number
-  'allow-lan': boolean
-  'log-level': string
-  'mixed-port': number
-  'redir-port': number
-  'socks-port': number
-  'tproxy-port': number
-  'external-controller': string
-  secret: string
+export interface AutoReloadConfig {
+  enabled: boolean
+  onProxyChange: boolean
+  onProfileChange: boolean
+  onModeChange: boolean
 }
 
 export interface SystemProxy {
@@ -133,21 +123,6 @@ export interface ProviderRules {
   type: string
   updatedAt: string
   vehicleType: string
-}
-
-export interface ProviderItem {
-  name: string
-  type: string
-  proxies: Clash.Proxy[]
-  updatedAt?: string
-  vehicleType: string
-  subscriptionInfo?: {
-    Upload?: number
-    Download?: number
-    Total?: number
-    Expire?: number
-  }
-  testUrl?: string
 }
 
 export interface Traffic {

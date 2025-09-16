@@ -73,7 +73,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust stable
         run: |
@@ -85,17 +85,10 @@ jobs:
         run: |
           rustup target add ${{ inputs.arch }}-pc-windows-msvc
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: './backend/'
-          prefix-key: 'rust-stable'
-          key: windows-latest
-          shared-key: 'release'
-
       - name: Install Node latest
         uses: actions/setup-node@v4
         with:
-          node-version: latest
+          node-version: 22
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm

@@ -1,3 +1,4 @@
+use anyhow::Context;
 use chrono::Utc;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -12,34 +13,51 @@ pub struct TaskEvents {
     storage: Arc<Mutex<TaskStorage>>,
 }
 
-pub trait TaskEventsDispatcher {
-    fn new(storage: Arc<Mutex<TaskStorage>>) -> Self;
-    fn new_event(&self, task_id: TaskID, event_id: TaskEventID) -> Result<TaskEventID>;
-    fn dispatch(&self, event_id: TaskEventID, state: TaskEventState) -> Result<()>;
+/// TaskEventDispatcher is a dispatcher for a task event,
+/// currently, it's designed for a single thread task to dispatch event.
+pub struct TaskEventDispatcher {
+    storage: Arc<Mutex<TaskStorage>>,
+    event: TaskEvent,
 }
 
-impl TaskEventsDispatcher for TaskEvents {
-    fn new(storage: Arc<Mutex<TaskStorage>>) -> Self {
+impl TaskEvents {
+    pub fn new(storage: Arc<Mutex<TaskStorage>>) -> Self {
         TaskEvents { storage }
     }
 
-    fn new_event(&self, task_id: TaskID, event_id: TaskEventID) -> Result<TaskEventID> {
-        let storage = self.storage.lock();
-        let mut event = TaskEvent {
-            id: event_id,
-            task_id,
-            ..TaskEvent::default()
+    pub fn new_event(&self, task_id: TaskID, event_id: TaskEventID) -> Result<TaskEventDispatcher> {
+        tracing::debug!("create new event: {:?} for task: {:?}", event_id, task_id);
+        let mut dispatcher = {
+            let storage = self.storage.lock();
+            let event = TaskEvent {
+                id: event_id,
+                task_id,
+                ..TaskEvent::default()
+            };
+            storage.add_event(&event).context("failed to add event")?;
+            TaskEventDispatcher::new(self.storage.clone(), event)
         };
-        event.dispatch(TaskEventState::Pending);
-        storage.add_event(&event)?;
-        Ok(event_id)
+        dispatcher
+            .dispatch(TaskEventState::Pending)
+            .context("failed to dispatch pending event")?;
+        Ok(dispatcher)
     }
+}
 
-    fn dispatch(&self, event_id: TaskEventID, state: TaskEventState) -> Result<()> {
+impl TaskEventDispatcher {
+    pub fn new(storage: Arc<Mutex<TaskStorage>>, event: TaskEvent) -> Self {
+        TaskEventDispatcher { storage, event }
+    }
+    pub fn dispatch(&mut self, state: TaskEventState) -> Result<()> {
+        tracing::debug!(
+            "dispatch state: {:?} for event: {:?} of task: {:?}",
+            state,
+            self.event.id,
+            self.event.task_id
+        );
+        self.event.dispatch(state);
         let storage = self.storage.lock();
-        let mut event = storage.get_event(event_id).unwrap().unwrap(); // unwrap because it should be exist here, if not, it's a bug
-        event.dispatch(state);
-        storage.update_event(&event)?;
+        storage.update_event(&self.event)?;
         Ok(())
     }
 }

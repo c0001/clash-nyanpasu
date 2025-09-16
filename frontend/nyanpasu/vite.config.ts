@@ -8,11 +8,13 @@ import { createHtmlPlugin } from 'vite-plugin-html'
 import sassDts from 'vite-plugin-sass-dts'
 import svgr from 'vite-plugin-svgr'
 import tsconfigPaths from 'vite-tsconfig-paths'
-import tailwindPlugin from '@tailwindcss/vite'
+// import tailwindPlugin from '@tailwindcss/vite'
 // import react from "@vitejs/plugin-react";
 import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
 import legacy from '@vitejs/plugin-legacy'
 import react from '@vitejs/plugin-react-swc'
+
+const IS_NIGHTLY = process.env.NIGHTLY?.toLowerCase() === 'true'
 
 const devtools = () => {
   return {
@@ -26,7 +28,17 @@ const devtools = () => {
   }
 }
 
-const IS_NIGHTLY = process.env.NIGHTLY?.toLowerCase() === 'true'
+const builtinVars = () => {
+  return {
+    name: 'built-in-vars',
+    transformIndexHtml(html: string) {
+      return html.replace(
+        /<\/head>/,
+        `<script>window.__IS_NIGHTLY__ = ${IS_NIGHTLY ? 'true' : 'false'}</script></head>`,
+      )
+    },
+  }
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
@@ -34,7 +46,12 @@ export default defineConfig(({ command, mode }) => {
 
   const config = {
     // root: "/",
-    server: { port: 3000 },
+    server: {
+      port: 3000,
+      watch: {
+        ignored: ['**/*.scss.d.ts'],
+      },
+    },
     css: {
       preprocessorOptions: {
         scss: {
@@ -57,7 +74,7 @@ export default defineConfig(({ command, mode }) => {
       },
     },
     plugins: [
-      tailwindPlugin(),
+      // tailwindPlugin(),
       tsconfigPaths(),
       legacy({
         renderLegacyChunks: false,
@@ -80,6 +97,7 @@ export default defineConfig(({ command, mode }) => {
           },
         },
       }),
+      builtinVars(),
       TanStackRouterVite(),
       svgr(),
       react({

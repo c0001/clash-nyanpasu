@@ -2,20 +2,20 @@ use std::borrow::Cow;
 
 use once_cell::sync::Lazy;
 use serde_yaml::{
-    value::{Tag, TaggedValue},
     Mapping,
+    value::{Tag, TaggedValue},
 };
 
 use crate::{
     config::RUNTIME_CONFIG,
-    core::migration::{DynMigration, Migration},
+    core::migration::{DynMigration, Migration, MigrationExt},
 };
 
 pub static UNITS: Lazy<Vec<DynMigration>> = Lazy::new(|| {
     vec![
-        MigrateAppHomeDir.into(),
-        MigrateProxiesSelectorMode.into(),
-        MigrateScriptProfileType.into(),
+        MigrateAppHomeDir.boxed(),
+        MigrateProxiesSelectorMode.boxed(),
+        MigrateScriptProfileType.boxed(),
     ]
 });
 

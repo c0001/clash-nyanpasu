@@ -3,7 +3,7 @@ use std::{fmt, str::FromStr};
 use ambassador::delegatable_trait;
 use derive_builder::Builder;
 use nyanpasu_macro::BuilderUpdate;
-use serde::{de::Visitor, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Visitor};
 
 use crate::{
     config::profile::item_type::ProfileItemType, enhance::ScriptType, utils::dirs::app_profiles_dir,
@@ -52,15 +52,13 @@ pub struct ProfileShared {
 
 impl ProfileFileIo for ProfileShared {
     async fn read_file(&self) -> std::io::Result<String> {
-        let path =
-            app_profiles_dir().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let path = app_profiles_dir().map_err(std::io::Error::other)?;
         let file = path.join(&self.file);
         tokio::fs::read_to_string(file).await
     }
 
     async fn write_file(&self, content: String) -> std::io::Result<()> {
-        let path =
-            app_profiles_dir().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let path = app_profiles_dir().map_err(std::io::Error::other)?;
         let file = path.join(&self.file);
         let mut file = tokio::fs::OpenOptions::new()
             .write(true)
@@ -127,7 +125,7 @@ impl ProfileSharedBuilder {
                 None => {
                     return Err(ProfileSharedBuilderError::UninitializedField(
                         "type is required",
-                    ))
+                    ));
                 }
             },
             name: builder.name.unwrap(),

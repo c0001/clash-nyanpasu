@@ -1,19 +1,19 @@
-use crate::config::{nyanpasu::NetworkStatisticWidgetConfig, Config};
+use crate::config::{Config, nyanpasu::NetworkStatisticWidgetConfig};
 
 use super::core::clash::ws::ClashConnectionsConnectorEvent;
 
 use anyhow::Context;
 use nyanpasu_egui::{
-    ipc::{create_ipc_server, IpcSender, Message, StatisticMessage},
+    ipc::{IpcSender, Message, StatisticMessage, create_ipc_server},
     widget::StatisticWidgetVariant,
 };
-use std::sync::{atomic::AtomicBool, Arc};
-use tauri::{utils::platform::current_exe, Manager, Runtime};
+use std::sync::{Arc, atomic::AtomicBool};
+use tauri::{Manager, Runtime, utils::platform::current_exe};
 use tokio::{
     process::Child,
     sync::{
-        broadcast::{error::RecvError as BroadcastRecvError, Receiver as BroadcastReceiver},
         Mutex,
+        broadcast::{Receiver as BroadcastReceiver, error::RecvError as BroadcastRecvError},
     },
 };
 
@@ -50,11 +50,11 @@ impl WidgetManager {
                 match receiver.recv().await {
                     Ok(event) => {
                         if let Err(e) = this.handle_event(event).await {
-                            log::error!("Failed to handle event: {}", e);
+                            log::error!("Failed to handle event: {e}");
                         }
                     }
                     Err(e) => {
-                        log::error!("Error receiving event: {}", e);
+                        log::error!("Error receiving event: {e}");
                         if BroadcastRecvError::Closed == e {
                             signal.store(false, std::sync::atomic::Ordering::Release);
                             break;
@@ -69,74 +69,91 @@ impl WidgetManager {
 
     async fn handle_event(&self, event: ClashConnectionsConnectorEvent) -> anyhow::Result<()> {
         let mut instance = self.instance.clone().lock_owned().await;
-        if let ClashConnectionsConnectorEvent::Update(info) = event {
-            if instance
+        if let ClashConnectionsConnectorEvent::Update(info) = event
+            && instance
                 .as_mut()
                 .is_some_and(|instance| instance.is_alive())
-            {
-                tokio::task::spawn_blocking(move || {
-                    let instance = instance.as_ref().unwrap();
-                    // we only care about the update event now
-                    instance
-                        .tx
-                        .send(Message::UpdateStatistic(StatisticMessage {
-                            download_total: info.download_total,
-                            upload_total: info.upload_total,
-                            download_speed: info.download_speed,
-                            upload_speed: info.upload_speed,
-                        }))
-                        .context("Failed to send event to widget")?;
-                    Ok::<(), anyhow::Error>(())
-                })
-                .await
-                .context("Failed to send event to widget")??;
-            }
+        {
+            tokio::task::spawn_blocking(move || {
+                let instance = instance.as_ref().unwrap();
+                // we only care about the update event now
+                instance
+                    .send_message(Message::UpdateStatistic(StatisticMessage {
+                        download_total: info.download_total,
+                        upload_total: info.upload_total,
+                        download_speed: info.download_speed,
+                        upload_speed: info.upload_speed,
+                    }))
+                    .context("Failed to send event to widget")?;
+                Ok::<(), anyhow::Error>(())
+            })
+            .await
+            .context("Failed to send event to widget")??;
         }
         Ok(())
     }
 
     pub async fn start(&self, widget: StatisticWidgetVariant) -> anyhow::Result<()> {
-        let mut instance = self.instance.lock().await;
-        if instance.is_some() {
+        if (self.instance.lock().await).is_some() {
             log::info!("Widget already running, stopping it first...");
             self.stop().await.context("Failed to stop widget")?;
         }
+        let mut instance = self.instance.lock().await;
         let current_exe = current_exe().context("Failed to get current executable")?;
         // This operation is blocking, but it internal just a system call, so I think it's okay
         let (mut ipc_server, server_name) = create_ipc_server()?;
         // spawn a process to run the widget
-        let child = tokio::process::Command::new(current_exe)
+        let variant = format!("{widget}");
+        tracing::debug!("Spawning widget process for {}...", variant);
+        let widget_win_state_path = crate::utils::dirs::app_data_dir()
+            .context("Failed to get app data dir")?
+            .join(format!("widget_{variant}.state"));
+        let mut child = tokio::process::Command::new(current_exe)
             .arg("statistic-widget")
-            .arg(serde_json::to_string(&widget).context("Failed to serialize widget")?)
+            .arg(variant)
             .env("NYANPASU_EGUI_IPC_SERVER", server_name)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
+            .env("NYANPASU_EGUI_WINDOW_STATE_PATH", widget_win_state_path)
+            .stdin(std::process::Stdio::inherit())
+            .stdout(os_pipe::dup_stdout()?)
+            .stderr(os_pipe::dup_stderr()?)
             .spawn()
             .context("Failed to spawn widget process")?;
-        let tx = tokio::task::spawn_blocking(move || {
-            ipc_server
-                .connect()
-                .context("Failed to connect to widget")?;
-            ipc_server.into_tx().context("Failed to get ipc sender")
-        })
-        .await
-        .context("Failed to read widget output")??;
+        tracing::debug!("Waiting for widget process to start...");
+        let tx = tokio::select! {
+            res = tokio::task::spawn_blocking(move || {
+                ipc_server
+                    .connect()
+                    .context("Failed to connect to widget")?;
+                ipc_server.into_tx().context("Failed to get ipc sender")
+            }) => res.context("Failed to get ipc sender")??,
+            res = child.wait() => {
+                match res {
+                    Ok(status) => {
+                        return Err(anyhow::anyhow!("Widget process exited: {}", status));
+                    }
+                    Err(e) => {
+                        return Err(anyhow::anyhow!("Failed to wait for widget process: {}", e));
+                    }
+                }
+            }
+        };
         instance.replace(WidgetManagerInstance { tx, process: child });
         Ok(())
     }
 
     pub async fn stop(&self) -> anyhow::Result<()> {
         let Some(mut instance) = self.instance.lock().await.take() else {
+            tracing::debug!("Widget instance is not exists, skipping...");
             return Ok(());
         };
         if !instance.is_alive() {
+            tracing::debug!("Widget instance is not alive, skipping...");
             return Ok(());
         }
         // first try to stop the process gracefully
         let mut instance = tokio::task::spawn_blocking(move || {
             instance
-                .tx
-                .send(Message::Stop)
+                .send_message(Message::Stop)
                 .context("Failed to send stop message to widget")?;
             Ok::<WidgetManagerInstance, anyhow::Error>(instance)
         })
@@ -169,6 +186,15 @@ impl WidgetManager {
 impl WidgetManagerInstance {
     pub fn is_alive(&mut self) -> bool {
         self.process.try_wait().is_ok_and(|status| status.is_none())
+    }
+
+    fn send_message(&self, message: Message) -> anyhow::Result<()> {
+        #[cfg(debug_assertions)]
+        tracing::debug!("Sending message to widget: {:?}", message);
+        self.tx
+            .send(message)
+            .context("Failed to send message to widget")?;
+        Ok(())
     }
 }
 

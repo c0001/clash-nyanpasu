@@ -5,16 +5,14 @@ import { Virtualizer } from 'virtua'
 import { proxyGroupAtom } from '@/store'
 import { proxiesFilterAtom } from '@/store/proxies'
 import {
-  alpha,
   ListItem,
   ListItemButton,
   ListItemButtonProps,
   ListItemIcon,
   ListItemText,
-  useTheme,
 } from '@mui/material'
-import { getServerPort, useClashCore } from '@nyanpasu/interface'
-import { LazyImage } from '@nyanpasu/ui'
+import { getServerPort, useClashProxies } from '@nyanpasu/interface'
+import { alpha, LazyImage } from '@nyanpasu/ui'
 
 const IconRender = memo(function IconRender({ icon }: { icon: string }) {
   const {
@@ -53,9 +51,7 @@ export const GroupList = ({
   scrollRef,
   ...listItemButtonProps
 }: GroupListProps) => {
-  const { data } = useClashCore()
-
-  const { palette } = useTheme()
+  const { data } = useClashProxies()
 
   const [proxyGroup, setProxyGroup] = useAtom(proxyGroupAtom)
   const proxiesFilter = useAtomValue(proxiesFilterAtom)
@@ -71,7 +67,7 @@ export const GroupList = ({
     }
 
     return data.groups.filter((group) => {
-      const filterMatches =
+      return (
         !deferredProxiesFilter ||
         group.name
           .toLowerCase()
@@ -82,7 +78,7 @@ export const GroupList = ({
             .includes(deferredProxiesFilter.toLowerCase())
         }) ||
         false
-      return !(group.hidden ?? false) && filterMatches
+      )
     })
   }, [data?.groups, deferredProxiesFilter])
 
@@ -97,13 +93,11 @@ export const GroupList = ({
               selected={selected}
               onClick={() => handleSelect(index)}
               sx={[
-                selected
-                  ? {
-                      backgroundColor: `${alpha(palette.primary.main, 0.3)} !important`,
-                    }
-                  : {
-                      backgroundColor: null,
-                    },
+                (theme) => ({
+                  backgroundColor: selected
+                    ? `${alpha(theme.vars.palette.primary.main, 0.3)} !important`
+                    : null,
+                }),
               ]}
               {...listItemButtonProps}
             >

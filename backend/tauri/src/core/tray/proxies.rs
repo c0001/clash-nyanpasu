@@ -1,5 +1,5 @@
 use crate::{
-    config::{nyanpasu::ProxiesSelectorMode, Config},
+    config::{Config, nyanpasu::ProxiesSelectorMode},
     core::{
         clash::proxies::{Proxies, ProxiesGuard, ProxiesGuardExt},
         handle::Handle,
@@ -7,7 +7,7 @@ use crate::{
 };
 use anyhow::Context;
 use indexmap::IndexMap;
-use tauri::{menu::MenuBuilder, AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime, menu::MenuBuilder};
 use tracing::{debug, error, warn};
 use tracing_attributes::instrument;
 
@@ -193,8 +193,9 @@ pub async fn proxies_updated_receiver() {
                     TrayUpdateType::Part(action_list) => {
                         debug!("should do partial update, op list: {:?}", action_list);
                         tray_proxies_holder = current_tray_proxies;
-                        platform_impl::update_selected_proxies(&action_list);
-                        debug!("update selected proxies success");
+                        debug!("todo: platform_impl::update_selected_proxies(&action_list)");
+                        // platform_impl::update_selected_proxies(&action_list);
+                        // debug!("update selected proxies success");
                     }
                     _ => {}
                 }
@@ -223,11 +224,11 @@ mod platform_impl {
     use rust_i18n::t;
     use std::sync::atomic::AtomicBool;
     use tauri::{
+        AppHandle, Manager, Runtime,
         menu::{
             CheckMenuItemBuilder, Menu, MenuBuilder, MenuItemBuilder, MenuItemKind, Submenu,
             SubmenuBuilder,
         },
-        AppHandle, Manager, Runtime,
     };
     use tracing::warn;
 
@@ -256,12 +257,12 @@ mod platform_impl {
             let id = item_ids.len();
             item_ids.insert(key, id);
             let mut sub_item_builder = CheckMenuItemBuilder::new(item.clone())
-                .id(format!("proxy_node_{}", id))
+                .id(format!("proxy_node_{id}"))
                 .checked(false);
-            if let Some(now) = group.current.clone() {
-                if now == item.as_str() {
-                    sub_item_builder = sub_item_builder.checked(true);
-                }
+            if let Some(now) = group.current.clone()
+                && now == item.as_str()
+            {
+                sub_item_builder = sub_item_builder.checked(true);
             }
 
             if !matches!(group.r#type.as_str(), "Selector" | "Fallback") {
@@ -520,7 +521,7 @@ pub fn on_system_tray_event(event: &str) {
             ProxiesGuard::global()
                 .select_proxy(&group, &name)
                 .await
-                .with_context(|| format!("select proxy failed, {} {}, cause: ", group, name))?;
+                .with_context(|| format!("select proxy failed, {group} {name}, cause: "))?;
 
             debug!("select proxy success: {} {}", group, name);
             Ok::<(), anyhow::Error>(())

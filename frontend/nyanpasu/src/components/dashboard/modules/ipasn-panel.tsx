@@ -1,23 +1,31 @@
-import countryCodeEmoji from 'country-code-emoji'
+import { flag as countryCodeEmoji } from 'country-emoji'
 import { useAtomValue } from 'jotai'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { mutate } from 'swr'
 import { atomIsDrawer } from '@/store'
 import { Visibility, VisibilityOff } from '@mui/icons-material'
-import { LoadingButton } from '@mui/lab'
-import { CircularProgress, IconButton, Paper, Tooltip } from '@mui/material'
-import Grid from '@mui/material/Grid2'
-import { useIPSB } from '@nyanpasu/interface'
+import {
+  Button,
+  CircularProgress,
+  IconButton,
+  Paper,
+  Tooltip,
+} from '@mui/material'
+import Grid from '@mui/material/Grid'
+import { useIPSB, useSetting } from '@nyanpasu/interface'
 import { cn } from '@nyanpasu/ui'
 
 const IP_REFRESH_SECONDS = 180
 
 const EmojiCounty = ({ countryCode }: { countryCode: string }) => {
-  const emoji = countryCodeEmoji(countryCode)
+  let emoji = countryCodeEmoji(countryCode)
+
+  if (!emoji) {
+    emoji = '🇺🇳'
+  }
 
   return (
-    <div className="relative text-5xl">
+    <div className="relative text-5xl select-none">
       <span className="opacity-50 blur">{emoji}</span>
 
       <span className="absolute left-0">{emoji}</span>
@@ -40,12 +48,16 @@ export const IPASNPanel = ({ refreshCount }: { refreshCount: number }) => {
 
   const isDrawer = useAtomValue(atomIsDrawer)
 
+  const { value } = useSetting('clash_core')
+
+  const supportMemory = value && ['mihomo', 'mihomo-alpha'].includes(value)
+
   return (
     <Grid
       size={{
-        sm: isDrawer ? 7 : 12,
-        md: 8,
-        lg: 5,
+        sm: isDrawer ? (supportMemory ? 6 : 12) : 12,
+        md: supportMemory ? 8 : 12,
+        lg: supportMemory ? 5 : 8,
         xl: 3,
       }}
     >
@@ -57,11 +69,11 @@ export const IPASNPanel = ({ refreshCount }: { refreshCount: number }) => {
             )}
 
             <div className="flex flex-col gap-1" style={{ width: MAX_WIDTH }}>
-              <div className="text-shadow-md flex items-end justify-between text-xl font-bold">
+              <div className="flex items-end justify-between text-xl font-bold text-shadow-md">
                 <div className="truncate">{data.country}</div>
 
                 <Tooltip title={t('Click to Refresh Now')}>
-                  <LoadingButton
+                  <Button
                     className="!size-8 !min-w-0"
                     onClick={handleRefreshIP}
                     loading={isValidating}
@@ -78,7 +90,7 @@ export const IPASNPanel = ({ refreshCount }: { refreshCount: number }) => {
                         }
                       />
                     )}
-                  </LoadingButton>
+                  </Button>
                 </Tooltip>
               </div>
 

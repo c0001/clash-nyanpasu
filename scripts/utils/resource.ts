@@ -1,6 +1,5 @@
 // import { ArchMapping } from 'utils/manifest';
-import consola from 'consola'
-import fetch, { type RequestInit } from 'node-fetch'
+import { fetch, type RequestInit } from 'undici'
 import {
   CLASH_META_ALPHA_MANIFEST,
   CLASH_META_MANIFEST,
@@ -13,6 +12,7 @@ import {
 import { BinInfo, SupportedArch } from '../types'
 import { getProxyAgent } from './'
 import { SIDECAR_HOST } from './consts'
+import { consola } from './logger'
 
 const SERVICE_REPO = 'libnyanpasu/nyanpasu-service'
 
@@ -219,7 +219,7 @@ export const getClashRsAlphaLatestVersion = async () => {
     const httpProxy = getProxyAgent()
 
     if (httpProxy) {
-      opts.agent = httpProxy
+      opts.dispatcher = httpProxy
     }
 
     const response = await fetch(VERSION_URL!, {
@@ -281,7 +281,7 @@ export const getMetaAlphaLatestVersion = async () => {
     const httpProxy = getProxyAgent()
 
     if (httpProxy) {
-      opts.agent = httpProxy
+      opts.dispatcher = httpProxy
     }
 
     const response = await fetch(VERSION_URL!, {
@@ -307,7 +307,7 @@ export const getNyanpasuServiceLatestVersion = async () => {
 
     const httpProxy = getProxyAgent()
     if (httpProxy) {
-      opts.agent = httpProxy
+      opts.dispatcher = httpProxy
     }
 
     const url = new URL('https://github.com')

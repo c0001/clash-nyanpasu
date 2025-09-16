@@ -1,8 +1,8 @@
+import { useLockFn } from 'ahooks'
 import { CSSProperties, memo, useMemo } from 'react'
-import { alpha, useTheme } from '@mui/material'
 import Box from '@mui/material/Box'
-import { ProxyItem } from '@nyanpasu/interface'
-import { cn } from '@nyanpasu/ui'
+import { ClashProxiesQueryProxyItem } from '@nyanpasu/interface'
+import { alpha, cn } from '@nyanpasu/ui'
 import { PaperSwitchButton } from '../setting/modules/system-proxy'
 import DelayChip from './delay-chip'
 import FeatureChip from './feature-chip'
@@ -13,38 +13,44 @@ export const NodeCard = memo(function NodeCard({
   node,
   now,
   disabled,
-  onClick,
-  onClickDelay,
   style,
 }: {
-  node: ProxyItem
+  node: ClashProxiesQueryProxyItem
   now?: string | null
   disabled?: boolean
-  onClick: () => void
-  onClickDelay: () => Promise<void>
   style?: CSSProperties
 }) {
-  const { palette } = useTheme()
-
   const delay = useMemo(() => filterDelay(node.history), [node.history])
 
   const checked = node.name === now
+
+  const handleDelayClick = useLockFn(async () => {
+    await node.mutateDelay()
+  })
+
+  const handleClick = useLockFn(async () => {
+    await node.mutateSelect()
+  })
 
   return (
     <PaperSwitchButton
       label={node.name}
       checked={checked}
-      onClick={onClick}
+      disableLoading
+      onClick={handleClick}
       disabled={disabled}
       style={style}
       className={cn(styles.Card, delay === -1 && styles.NoDelay)}
-      sxPaper={{
+      sxPaper={(theme) => ({
         backgroundColor: checked
-          ? alpha(palette.primary.main, 0.3)
-          : palette.mode === 'dark'
-            ? alpha(palette.grey[900], 0.3)
-            : palette.grey[100],
-      }}
+          ? alpha(theme.vars.palette.primary.main, 0.3)
+          : theme.vars.palette.grey[100],
+        ...theme.applyStyles('dark', {
+          backgroundColor: checked
+            ? alpha(theme.vars.palette.primary.main, 0.3)
+            : theme.vars.palette.grey[900],
+        }),
+      })}
     >
       <Box width="100%" display="flex" gap={0.5}>
         <FeatureChip label={node.type} />
@@ -54,7 +60,7 @@ export const NodeCard = memo(function NodeCard({
         <DelayChip
           className={styles.DelayChip}
           delay={delay}
-          onClick={onClickDelay}
+          onClick={handleDelayClick}
         />
       </Box>
     </PaperSwitchButton>

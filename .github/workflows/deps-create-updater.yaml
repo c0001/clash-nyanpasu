@@ -23,14 +23,20 @@ on:
         description: 'Release Body'
         required: false
         type: string
+    secrets:
+      SURGE_TOKEN:
+        required: true
 
 jobs:
   updater:
     name: Update Updater
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # This is required to allow the GitHub Action to authenticate with Deno Deploy.
+      contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.ref }}
           # blocked by https://github.com/actions/checkout/issues/1467
@@ -39,7 +45,7 @@ jobs:
       - name: Install Node latest
         uses: actions/setup-node@v4
         with:
-          node-version: latest
+          node-version: 22
 
       - uses: pnpm/action-setup@v4
         name: Install pnpm
@@ -73,3 +79,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_BODY: ${{ inputs.release_body || github.event.release.body }}
+
+      - name: Download updater files from Github release
+        uses: robinraju/release-downloader@v1
+        with:
+          tag: updater
+          repository: libnyanpasu/clash-nyanpasu
+          fileName: '*.json'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          out-file-path: manifest/site/updater
+      - name: Upload updater to surge.sh
+        run: |
+          pnpm i -g surge
+          surge manifest/site surge.elaina.moe
+          surge manifest/site nyanpasu.surge.sh
+        env:
+          SURGE_TOKEN: ${{ secrets.SURGE_TOKEN }}
+      - name: Deploy to Deno Deploy
+        uses: denoland/deployctl@v1
+        with:
+          project: clash-nyanpasu-manifest
+          entrypoint: jsr:@std/http/file-server
+          root: manifest/site

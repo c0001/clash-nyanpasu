@@ -3,8 +3,8 @@ use std::{borrow::Cow, collections::HashMap};
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
-use crate::consts::{BuildInfo, BUILD_INFO};
-use humansize::{SizeFormatter, BINARY};
+use crate::consts::{BUILD_INFO, BuildInfo};
+use humansize::{BINARY, SizeFormatter};
 use nyanpasu_utils::core::{ClashCoreType, CoreType};
 use serde::Serialize;
 use sysinfo::System;
@@ -66,7 +66,7 @@ pub fn collect_envs<'a>() -> Result<EnvInfo<'a>, std::io::Error> {
 
         let mut command = std::process::Command::new(
             super::dirs::get_data_or_sidecar_path(name)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?,
+                .map_err(|e| std::io::Error::other(e.to_string()))?,
         );
         command.args(if matches!(c, CoreType::Clash(ClashCoreType::ClashRust)) {
             ["-V"]

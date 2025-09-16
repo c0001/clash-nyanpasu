@@ -1,48 +1,62 @@
 import { useAsyncEffect } from 'ahooks'
-import { useState } from 'react'
+import { CSSProperties, useState } from 'react'
 import { formatAnsi } from '@/utils/shiki'
-import { useTheme } from '@mui/material'
+import { Box, SxProps, Theme, useColorScheme } from '@mui/material'
 import { LogMessage } from '@nyanpasu/interface'
 import { cn } from '@nyanpasu/ui'
 import styles from './log-item.module.scss'
 
-export const LogItem = ({ value }: { value: LogMessage }) => {
-  const { palette } = useTheme()
+const colorMapping: { [key: string]: SxProps<Theme> } = {
+  error: (theme) => ({
+    color: theme.vars.palette.error.main,
+  }),
+  warning: (theme) => ({
+    color: theme.vars.palette.warning.main,
+  }),
+  info: (theme) => ({
+    color: theme.vars.palette.info.main,
+  }),
+}
 
+export const LogItem = ({
+  value,
+  className,
+}: {
+  value: LogMessage
+  className?: string
+}) => {
   const [payload, setPayload] = useState(value.payload)
 
-  const colorMapping: { [key: string]: string } = {
-    error: palette.error.main,
-    warning: palette.warning.main,
-    info: palette.info.main,
-  }
+  const { mode } = useColorScheme()
 
   useAsyncEffect(async () => {
     setPayload(await formatAnsi(value.payload))
   }, [value.payload])
 
   return (
-    <div className="w-full p-4 pt-2 pb-0 font-mono select-text">
+    <div
+      className={cn('w-full p-4 pt-2 pb-0 font-mono select-text', className)}
+    >
       <div className="flex gap-2">
         <span className="font-thin">{value.time}</span>
 
-        <span
+        <Box
+          component="span"
           className="inline-block font-semibold uppercase"
-          style={{
-            color: colorMapping[value.type],
-          }}
+          sx={colorMapping[value.type]}
         >
           {value.type}
-        </span>
+        </Box>
       </div>
 
-      <div className="border-b border-slate-200 pb-2 text-wrap">
-        <p
-          className={cn(
-            styles.item,
-            palette.mode === 'dark' && styles.dark,
-            'data',
-          )}
+      <div className="pb-2 text-wrap">
+        <div
+          className={cn(styles.item, mode === 'dark' && styles.dark)}
+          style={
+            {
+              '--item-font': 'var(--font-mono)',
+            } as CSSProperties
+          }
           dangerouslySetInnerHTML={{
             __html: payload,
           }}

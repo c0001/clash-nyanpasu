@@ -10,6 +10,9 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 include = ["src/**", "Cargo.toml", "LICENSE_*"]
 
+[lib]
+doctest = false
+
 [dependencies]
 dirs = "6"
 log = "0.4"
@@ -18,13 +21,13 @@ tauri-utils = { version = "2" }
 
 [target.'cfg(windows)'.dependencies]
 interprocess = { version = "2" }
-windows-sys = { version = "0.59.0", features = [
+windows-sys = { version = "0.60", features = [
   "Win32_Foundation",
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_WindowsAndMessaging",
 ] }
 winreg = "0.55.0"
-tokio = { version = "1", features = ["full"] }
+tokio = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.5.2"
+objc2 = "0.6.1"

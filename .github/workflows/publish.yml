@@ -24,14 +24,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
       - name: Prepare Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - uses: pnpm/action-setup@v4
         name: Install pnpm
         with:
@@ -81,7 +81,7 @@ jobs:
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Commit changes
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v6
         with:
           commit_message: 'chore: bump version to v${{ steps.update-version.outputs.version }}'
           commit_user_name: 'github-actions[bot]'

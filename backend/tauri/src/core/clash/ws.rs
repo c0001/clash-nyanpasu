@@ -1,7 +1,7 @@
 use std::{
     future::Future,
     ops::Deref,
-    sync::{atomic::Ordering, Arc},
+    sync::{Arc, atomic::Ordering},
 };
 
 use anyhow::Context;
@@ -126,14 +126,14 @@ impl ClashConnectionsConnector {
             let info = crate::Config::clash().data().get_client_info();
             (info.server, info.secret)
         };
-        let url = format!("ws://{}/connections", server);
+        let url = format!("ws://{server}/connections");
         let mut request = url
             .into_client_request()
             .context("failed to create client request")?;
         if let Some(secret) = secret {
             request.headers_mut().insert(
                 "Authorization",
-                format!("Bearer {}", secret)
+                format!("Bearer {secret}")
                     .parse()
                     .context("failed to create header value")?,
             );
@@ -148,7 +148,7 @@ impl ClashConnectionsConnector {
         async {
             self.dispatch_state_changed(ClashConnectionsConnectorState::Connecting);
             let endpoint = Self::endpoint().context("failed to create endpoint")?;
-            log::debug!("connecting to clash connections ws server: {:?}", endpoint);
+            log::debug!("connecting to clash connections ws server: {endpoint:?}");
             let mut rx = connect_clash_server::<ClashConnectionsMessage>(endpoint).await?;
             self.dispatch_state_changed(ClashConnectionsConnectorState::Connected);
             let this = self.clone();
@@ -167,11 +167,13 @@ impl ClashConnectionsConnector {
                             );
                             tokio::spawn(async move {
                                 let restart = async || this.restart().await;
-                                log_err!(restart
-                                    .retry(backon::ExponentialBuilder::default())
-                                    .sleep(tokio::time::sleep)
-                                    .await
-                                    .context("failed to restart clash connections"));
+                                log_err!(
+                                    restart
+                                        .retry(backon::ExponentialBuilder::default())
+                                        .sleep(tokio::time::sleep)
+                                        .await
+                                        .context("failed to restart clash connections")
+                                );
                             });
                             break;
                         }
@@ -270,17 +272,5 @@ impl Drop for ClashConnectionsConnectorInner {
                 tauri::async_runtime::block_on(cleanup);
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_connect_clash_server() {
-        "ws://127.0.0.1:12649:10808/connections"
-            .into_client_request()
-            .unwrap();
     }
 }

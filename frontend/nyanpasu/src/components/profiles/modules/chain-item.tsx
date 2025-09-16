@@ -1,19 +1,10 @@
-import { useLongPress } from 'ahooks'
-import { Reorder, useDragControls } from 'framer-motion'
-import {
-  memo,
-  PointerEvent,
-  useCallback,
-  useRef,
-  useState,
-  useTransition,
-} from 'react'
+import { Reorder } from 'framer-motion'
+import { memo, PointerEvent, useRef, useState, useTransition } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Menu as MenuIcon } from '@mui/icons-material'
-import { LoadingButton } from '@mui/lab'
-import { alpha, ListItemButton, Menu, MenuItem, useTheme } from '@mui/material'
+import { Button, ListItemButton, Menu, MenuItem } from '@mui/material'
 import { ProfileQueryResultItem } from '@nyanpasu/interface'
-import { cleanDeepClickEvent } from '@nyanpasu/ui'
+import { alpha, cleanDeepClickEvent } from '@nyanpasu/ui'
 
 const longPressDelay = 200
 
@@ -29,10 +20,6 @@ export const ChainItem = memo(function ChainItem({
   onChainEdit: () => void
 }) {
   const { t } = useTranslation()
-
-  const { palette } = useTheme()
-
-  // const { deleteProfile, viewProfile } = useClash()
 
   const [isPending, startTransition] = useTransition()
 
@@ -93,24 +80,18 @@ export const ChainItem = memo(function ChainItem({
             {
               borderRadius: 4,
             },
-            selected
-              ? {
-                  backgroundColor: alpha(palette.primary.main, 0.3),
-                }
-              : {
-                  backgroundColor: alpha(palette.secondary.main, 0.1),
-                },
-            selected
-              ? {
-                  '&:hover': {
-                    backgroundColor: alpha(palette.primary.main, 0.5),
-                  },
-                }
-              : {
-                  '&:hover': {
-                    backgroundColor: null,
-                  },
-                },
+            (theme) => ({
+              backgroundColor: selected
+                ? alpha(theme.vars.palette.primary.main, 0.3)
+                : alpha(theme.vars.palette.secondary.main, 0.1),
+            }),
+            (theme) => ({
+              '&:hover': {
+                backgroundColor: selected
+                  ? alpha(theme.vars.palette.primary.main, 0.5)
+                  : null,
+              },
+            }),
           ]}
           onClick={handleClick}
           disabled={isPending}
@@ -119,7 +100,7 @@ export const ChainItem = memo(function ChainItem({
             <span>{item.name}</span>
           </div>
 
-          <LoadingButton
+          <Button
             size="small"
             color="primary"
             className="!size-8 !min-w-0"
@@ -130,7 +111,7 @@ export const ChainItem = memo(function ChainItem({
             }}
           >
             <MenuIcon />
-          </LoadingButton>
+          </Button>
         </ListItemButton>
       </Reorder.Item>
       <Menu

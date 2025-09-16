@@ -3,28 +3,27 @@ import { useAtomValue } from 'jotai'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { atomIsDrawer } from '@/store'
+import { formatError } from '@/utils'
 import { message } from '@/utils/notification'
 import { NetworkPing, SettingsEthernet } from '@mui/icons-material'
 import { Chip, Paper, type ChipProps } from '@mui/material'
-import Grid from '@mui/material/Grid2'
-import { useClash, useNyanpasu } from '@nyanpasu/interface'
+import Grid from '@mui/material/Grid'
+import { useClashConfig, useSetting, useSystemProxy } from '@nyanpasu/interface'
 import { PaperSwitchButton } from '../setting/modules/system-proxy'
 
 const TitleComp = () => {
   const { t } = useTranslation()
 
-  const { getSystemProxy } = useNyanpasu()
+  const { data } = useSystemProxy()
 
   const {
-    getConfigs: { data: clashConfigs },
-  } = useClash()
+    query: { data: clashConfigs },
+  } = useClashConfig()
 
   const status = useMemo<{
     label: string
     color: ChipProps['color']
   }>(() => {
-    const data = getSystemProxy.data
-
     if (data?.enable) {
       const port = Number(data.server.split(':')[1])
 
@@ -45,7 +44,7 @@ const TitleComp = () => {
         color: 'error',
       }
     }
-  }, [clashConfigs, getSystemProxy.data])
+  }, [clashConfigs, data?.enable, data?.server, t])
 
   return (
     <div className="flex items-center gap-2 px-1">
@@ -70,22 +69,31 @@ export const ProxyShortcuts = () => {
 
   const isDrawer = useAtomValue(atomIsDrawer)
 
-  const { nyanpasuConfig, setNyanpasuConfig } = useNyanpasu()
+  const systemProxy = useSetting('enable_system_proxy')
 
-  const handleClick = useLockFn(
-    async (key: 'enable_system_proxy' | 'enable_tun_mode') => {
-      try {
-        await setNyanpasuConfig({
-          [key]: !nyanpasuConfig?.[key],
-        })
-      } catch (e) {
-        message(`Activation failed!`, {
-          title: t('Error'),
-          kind: 'error',
-        })
-      }
-    },
-  )
+  const handleSystemProxy = useLockFn(async () => {
+    try {
+      await systemProxy.upsert(!systemProxy.value)
+    } catch (error) {
+      message(`Activation System Proxy failed!`, {
+        title: t('Error'),
+        kind: 'error',
+      })
+    }
+  })
+
+  const tunMode = useSetting('enable_tun_mode')
+
+  const handleTunMode = useLockFn(async () => {
+    try {
+      await tunMode.upsert(!tunMode.value)
+    } catch (error) {
+      message(`Activation TUN Mode failed! \n Error: ${formatError(error)}`, {
+        title: t('Error'),
+        kind: 'error',
+      })
+    }
+  })
 
   return (
     <Grid
@@ -102,8 +110,8 @@ export const ProxyShortcuts = () => {
         <div className="flex gap-3">
           <div className="!w-full">
             <PaperSwitchButton
-              checked={nyanpasuConfig?.enable_system_proxy || false}
-              onClick={() => handleClick('enable_system_proxy')}
+              checked={systemProxy.value || false}
+              onClick={handleSystemProxy}
             >
               <div className="flex flex-col gap-2">
                 <NetworkPing />
@@ -115,8 +123,8 @@ export const ProxyShortcuts = () => {
 
           <div className="!w-full">
             <PaperSwitchButton
-              checked={nyanpasuConfig?.enable_tun_mode || false}
-              onClick={() => handleClick('enable_tun_mode')}
+              checked={tunMode.value || false}
+              onClick={handleTunMode}
             >
               <div className="flex flex-col gap-2">
                 <SettingsEthernet />

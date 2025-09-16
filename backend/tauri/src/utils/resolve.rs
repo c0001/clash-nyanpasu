@@ -1,7 +1,7 @@
 use crate::{
     config::{
-        nyanpasu::{ClashCore, WindowState},
         Config, IVerge,
+        nyanpasu::{ClashCore, WindowState},
     },
     core::{storage::Storage, tray::proxies, *},
     log_err, trace_err,
@@ -14,7 +14,7 @@ use std::{
     net::TcpListener,
     sync::atomic::{AtomicU16, Ordering},
 };
-use tauri::{async_runtime::block_on, App, AppHandle, Emitter, Listener, Manager};
+use tauri::{App, AppHandle, Emitter, Listener, Manager, async_runtime::block_on};
 use tauri_plugin_shell::ShellExt;
 static OPEN_WINDOWS_COUNTER: AtomicU16 = AtomicU16::new(0);
 
@@ -35,13 +35,13 @@ fn set_window_controls_pos(
     use objc2_app_kit::NSWindowButton;
     use objc2_foundation::NSRect;
     let close = window
-        .standardWindowButton(NSWindowButton::NSWindowCloseButton)
+        .standardWindowButton(NSWindowButton::CloseButton)
         .ok_or(anyhow::anyhow!("failed to get close button"))?;
     let miniaturize = window
-        .standardWindowButton(NSWindowButton::NSWindowMiniaturizeButton)
+        .standardWindowButton(NSWindowButton::MiniaturizeButton)
         .ok_or(anyhow::anyhow!("failed to get miniaturize button"))?;
     let zoom = window
-        .standardWindowButton(NSWindowButton::NSWindowZoomButton)
+        .standardWindowButton(NSWindowButton::ZoomButton)
         .ok_or(anyhow::anyhow!("failed to get zoom button"))?;
 
     let title_bar_container_view = unsafe {
@@ -86,7 +86,7 @@ pub fn find_unused_port() -> Result<u16> {
                 .latest()
                 .verge_mixed_port
                 .unwrap_or(Config::clash().data().get_mixed_port());
-            log::warn!(target: "app", "use default port: {}", port);
+            log::warn!(target: "app", "use default port: {port}");
             Ok(port)
         }
     }
@@ -465,10 +465,10 @@ pub async fn resolve_core_version(app_handle: &AppHandle, core_type: &ClashCore)
         return Err(anyhow::anyhow!("failed to get core version"));
     }
     let out = String::from_utf8_lossy(&out.stdout);
-    log::trace!(target: "app", "get core version: {:?}", out);
+    log::trace!(target: "app", "get core version: {out:?}");
     let out = out.trim().split(' ').collect::<Vec<&str>>();
     for item in out {
-        log::debug!(target: "app", "check item: {}", item);
+        log::debug!(target: "app", "check item: {item}");
         if item.starts_with('v')
             || item.starts_with('n')
             || item.starts_with("alpha")

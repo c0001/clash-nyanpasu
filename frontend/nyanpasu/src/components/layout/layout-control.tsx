@@ -8,9 +8,9 @@ import {
   PushPin,
   PushPinOutlined,
 } from '@mui/icons-material'
-import { alpha, Button, ButtonProps, useTheme } from '@mui/material'
-import { saveWindowSizeState, useNyanpasu } from '@nyanpasu/interface'
-import { cn } from '@nyanpasu/ui'
+import { Button, ButtonProps } from '@mui/material'
+import { saveWindowSizeState, useSetting } from '@nyanpasu/interface'
+import { alpha, cn } from '@nyanpasu/ui'
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { listen, TauriEvent, UnlistenFn } from '@tauri-apps/api/event'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
@@ -19,22 +19,21 @@ import { platform as getPlatform } from '@tauri-apps/plugin-os'
 const appWindow = getCurrentWebviewWindow()
 
 const CtrlButton = (props: ButtonProps) => {
-  const { palette } = useTheme()
-
   return (
     <Button
       className="!size-8 !min-w-0"
-      sx={{
-        backgroundColor: alpha(palette.primary.main, 0.1),
+      sx={(theme) => ({
+        backgroundColor: alpha(theme.vars.palette.primary.main, 0.1),
         svg: { transform: 'scale(0.9)' },
-      }}
+      })}
       {...props}
     />
   )
 }
 
 export const LayoutControl = ({ className }: { className?: string }) => {
-  const { nyanpasuConfig, setNyanpasuConfig } = useNyanpasu()
+  const { value: alwaysOnTop, upsert } = useSetting('always_on_top')
+
   const { data: isMaximized } = useSuspenseQuery({
     queryKey: ['isMaximized'],
     queryFn: () => appWindow.isMaximized(),
@@ -56,15 +55,14 @@ export const LayoutControl = ({ className }: { className?: string }) => {
   }, [queryClient])
 
   const toggleAlwaysOnTop = useMemoizedFn(async () => {
-    const isAlwaysOnTop = !!nyanpasuConfig?.always_on_top
-    await setNyanpasuConfig({ always_on_top: !isAlwaysOnTop })
-    await appWindow.setAlwaysOnTop(!isAlwaysOnTop)
+    await upsert(!alwaysOnTop)
+    await appWindow.setAlwaysOnTop(!alwaysOnTop)
   })
 
   return (
     <div className={cn('flex gap-1', className)} data-tauri-drag-region>
       <CtrlButton onClick={toggleAlwaysOnTop}>
-        {nyanpasuConfig?.always_on_top ? (
+        {alwaysOnTop ? (
           <PushPin fontSize="small" style={{ transform: 'rotate(15deg)' }} />
         ) : (
           <PushPinOutlined

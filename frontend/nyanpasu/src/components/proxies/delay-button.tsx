@@ -2,14 +2,8 @@ import { useDebounceFn, useLockFn } from 'ahooks'
 import { memo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Bolt, Done } from '@mui/icons-material'
-import {
-  alpha,
-  Button,
-  CircularProgress,
-  Tooltip,
-  useTheme,
-} from '@mui/material'
-import { cn } from '@nyanpasu/ui'
+import { Button, CircularProgress, Tooltip } from '@mui/material'
+import { alpha, cn } from '@nyanpasu/ui'
 
 export const DelayButton = memo(function DelayButton({
   onClick,
@@ -17,8 +11,6 @@ export const DelayButton = memo(function DelayButton({
   onClick: () => Promise<void>
 }) {
   const { t } = useTranslation()
-
-  const { palette } = useTheme()
 
   const [loading, setLoading] = useState(false)
 
@@ -48,28 +40,28 @@ export const DelayButton = memo(function DelayButton({
     <Tooltip title={t('Latency check')}>
       <Button
         className="!fixed right-8 bottom-8 z-10 size-16 !rounded-2xl backdrop-blur"
-        sx={{
+        sx={(theme) => ({
           boxShadow: 8,
           backgroundColor: alpha(
-            palette[isSuccess ? 'success' : 'primary'].main,
+            theme.vars.palette[isSuccess ? 'success' : 'primary'].main,
             isSuccess ? 0.7 : 0.3,
           ),
 
           '&:hover': {
-            backgroundColor: alpha(palette.primary.main, 0.45),
+            backgroundColor: alpha(theme.vars.palette.primary.main, 0.45),
           },
 
-          '&.MuiLoadingButton-loading': {
-            backgroundColor: alpha(palette.primary.main, 0.15),
+          '&.MuiButton-loading': {
+            backgroundColor: alpha(theme.vars.palette.primary.main, 0.15),
           },
-        }}
+        })}
         onClick={handleClick}
       >
         <Bolt
           className={cn(
             '!size-8',
             '!transition-opacity',
-            mounted ? 'opacity-0' : 'opacity-1',
+            mounted ? 'opacity-0' : 'opacity-100',
           )}
         />
 
@@ -79,7 +71,7 @@ export const DelayButton = memo(function DelayButton({
             className={cn(
               'transition-opacity',
               'absolute',
-              loading ? 'opacity-1' : 'opacity-0',
+              loading ? 'opacity-100' : 'opacity-0',
             )}
           />
         )}
@@ -90,7 +82,7 @@ export const DelayButton = memo(function DelayButton({
             '!size-8',
             'absolute',
             '!transition-opacity',
-            isSuccess ? 'opacity-1' : 'opacity-0',
+            isSuccess ? 'opacity-100' : 'opacity-0',
           )}
         />
       </Button>

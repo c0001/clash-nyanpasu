@@ -1,4 +1,4 @@
-#![feature(auto_traits, negative_impls, let_chains)]
+#![feature(auto_traits, negative_impls, let_chains, trait_alias)]
 #![cfg_attr(
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
@@ -13,8 +13,12 @@ mod enhance;
 mod event_handler;
 mod feat;
 mod ipc;
+mod logging;
 mod server;
 mod setup;
+
+#[cfg(windows)]
+mod shutdown_hook;
 mod utils;
 mod widget;
 mod window;
@@ -26,6 +30,7 @@ use crate::{
     core::handle::Handle,
     utils::{init, resolve},
 };
+use anyhow::Context;
 use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri::{Emitter, Manager};
 use tauri_specta::{collect_commands, collect_events};
@@ -38,19 +43,21 @@ fn deadlock_detection() {
     use parking_lot::deadlock;
     use std::{thread, time::Duration};
     use tracing::error;
-    thread::spawn(move || loop {
-        thread::sleep(Duration::from_secs(10));
-        let deadlocks = deadlock::check_deadlock();
-        if deadlocks.is_empty() {
-            continue;
-        }
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_secs(10));
+            let deadlocks = deadlock::check_deadlock();
+            if deadlocks.is_empty() {
+                continue;
+            }
 
-        error!("{} deadlocks detected", deadlocks.len());
-        for (i, threads) in deadlocks.iter().enumerate() {
-            error!("Deadlock #{}", i);
-            for t in threads {
-                error!("Thread Id {:#?}", t.thread_id());
-                error!("{:#?}", t.backtrace());
+            error!("{} deadlocks detected", deadlocks.len());
+            for (i, threads) in deadlocks.iter().enumerate() {
+                error!("Deadlock #{}", i);
+                for t in threads {
+                    error!("Thread Id {:#?}", t.thread_id());
+                    error!("{:#?}", t.backtrace());
+                }
             }
         }
     });
@@ -101,16 +108,12 @@ pub fn run() -> std::io::Result<()> {
     if single_instance_result
         .as_ref()
         .is_ok_and(|instance| instance.is_some())
+        && let Err(e) = init::run_pending_migrations()
     {
-        if let Err(e) = init::run_pending_migrations() {
-            utils::dialog::panic_dialog(
-                &format!(
-                    "Failed to finish migration event: {}\nYou can see the detailed information at migration.log in your local data dir.\nYou're supposed to submit it as the attachment of new issue.", 
-                    e,
-                )
-            );
-            std::process::exit(1);
-        }
+        utils::dialog::panic_dialog(&format!(
+            "Failed to finish migration event: {e}\nYou can see the detailed information at migration.log in your local data dir.\nYou're supposed to submit it as the attachment of new issue.",
+        ));
+        std::process::exit(1);
     }
 
     crate::log_err!(init::init_config());
@@ -154,8 +157,7 @@ pub fn run() -> std::io::Result<()> {
 
         // FIXME: maybe move this logic to a util function?
         let msg = format!(
-            "Oops, we encountered some issues and program will exit immediately.\n\npayload: {:#?}\nlocation: {:?}\nbacktrace: {:#?}\n\n",
-            payload, location, backtrace,
+            "Oops, we encountered some issues and program will exit immediately.\n\npayload: {payload:#?}\nlocation: {location:?}\nbacktrace: {backtrace:#?}\n\n",
         );
         let child = std::process::Command::new(tauri::utils::platform::current_exe().unwrap())
             .arg("panic-dialog")
@@ -258,6 +260,8 @@ pub fn run() -> std::io::Result<()> {
             ipc::get_core_dir,
             // clash layer
             ipc::get_clash_ws_connections_state,
+            // updater layer
+            ipc::check_update,
         ])
         .events(collect_events![core::clash::ClashConnectionsEvent]);
 
@@ -281,20 +285,17 @@ pub fn run() -> std::io::Result<()> {
                         .arg(file)
                         .output()
                         .map(|_| ())
-                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+                        .map_err(io::Error::other)
                 })
                 .bigint(BigIntExportBehavior::Number)
                 .header("/* eslint-disable */\n// @ts-nocheck"),
             SPECTA_BINDINGS_PATH,
         ) {
             Ok(_) => {
-                log::debug!(
-                    "Exported typescript bindings, path: {}",
-                    SPECTA_BINDINGS_PATH
-                );
+                log::debug!("Exported typescript bindings, path: {SPECTA_BINDINGS_PATH}");
             }
             Err(e) => {
-                panic!("Failed to export typescript bindings: {}", e);
+                panic!("Failed to export typescript bindings: {e}");
             }
         };
     }
@@ -310,6 +311,7 @@ pub fn run() -> std::io::Result<()> {
         .invoke_handler(specta_builder.invoke_handler())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -318,6 +320,11 @@ pub fn run() -> std::io::Result<()> {
         .plugin(tauri_plugin_global_shortcut::Builder::default().build())
         .setup(move |app| {
             specta_builder.mount_events(app);
+            setup::setup(app)
+                .context("Failed to setup the app")
+                .inspect_err(|e| {
+                    tracing::error!("Failed to setup the app: {:#?}", e);
+                })?;
 
             #[cfg(target_os = "macos")]
             {

@@ -6,12 +6,9 @@ import { useTranslation } from 'react-i18next'
 import { formatError } from '@/utils'
 import { message } from '@/utils/notification'
 import { Add } from '@mui/icons-material'
-import { alpha, ListItemButton, useTheme } from '@mui/material'
-import {
-  ProfileQueryResultItem,
-  useClash,
-  useProfile,
-} from '@nyanpasu/interface'
+import { ListItemButton } from '@mui/material'
+import { ProfileQueryResultItem, useProfile } from '@nyanpasu/interface'
+import { alpha } from '@nyanpasu/ui'
 import { ClashProfile, filterProfiles } from '../utils'
 import ChainItem from './chain-item'
 import { atomChainsSelected, atomGlobalChainCurrent } from './store'
@@ -23,17 +20,15 @@ export interface SideChainProps {
 export const SideChain = ({ onChainEdit }: SideChainProps) => {
   const { t } = useTranslation()
 
-  const { palette } = useTheme()
-
   const isGlobalChainCurrent = useAtomValue(atomGlobalChainCurrent)
 
   const currentProfileUid = useAtomValue(atomChainsSelected)
 
-  const { setProfiles, reorderProfilesByList } = useClash()
+  const { query, upsert, patch, sort } = useProfile()
 
-  const { query, upsert } = useProfile()
+  const profiles = query.data
 
-  const { clash, chain } = filterProfiles(query.data?.items)
+  const { clash, chain } = filterProfiles(profiles?.items)
 
   const currentProfile = useMemo(() => {
     return clash?.find((item) => item.uid === currentProfileUid) as ClashProfile
@@ -41,7 +36,7 @@ export const SideChain = ({ onChainEdit }: SideChainProps) => {
 
   const handleChainClick = useLockFn(async (uid: string) => {
     const chains = isGlobalChainCurrent
-      ? (query.data?.chain ?? [])
+      ? (profiles?.chain ?? [])
       : (currentProfile?.chain ?? [])
 
     const updatedChains = chains.includes(uid)
@@ -55,7 +50,13 @@ export const SideChain = ({ onChainEdit }: SideChainProps) => {
         if (!currentProfile?.uid) {
           return
         }
-        await setProfiles(currentProfile!.uid, { chain: updatedChains })
+        await patch.mutateAsync({
+          uid: currentProfile.uid,
+          profile: {
+            ...currentProfile,
+            chain: updatedChains,
+          },
+        })
       }
     } catch (e) {
       message(`Apply error: ${formatError(e)}`, {
@@ -77,14 +78,14 @@ export const SideChain = ({ onChainEdit }: SideChainProps) => {
         values={reorderValues}
         onReorder={(values) => {
           const profileUids = clash?.map((item) => item.uid) || []
-          reorderProfilesByList([...profileUids, ...values])
+          sort.mutate([...profileUids, ...values])
         }}
         layoutScroll
         style={{ overflowY: 'scroll' }}
       >
         {chain?.map((item, index) => {
           const selected = isGlobalChainCurrent
-            ? query.data?.chain?.includes(item.uid)
+            ? profiles?.chain?.includes(item.uid)
             : currentProfile?.chain?.includes(item.uid)
 
           return (
@@ -101,10 +102,10 @@ export const SideChain = ({ onChainEdit }: SideChainProps) => {
 
       <ListItemButton
         className="!mt-2 !mb-2 flex justify-center gap-2"
-        sx={{
-          backgroundColor: alpha(palette.secondary.main, 0.1),
+        sx={(theme) => ({
+          backgroundColor: alpha(theme.vars.palette.secondary.main, 0.1),
           borderRadius: 4,
-        }}
+        })}
         onClick={() => onChainEdit()}
       >
         <Add color="primary" />

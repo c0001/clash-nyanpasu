@@ -6,18 +6,14 @@ import MutationProvider from '@/components/layout/mutation-provider'
 import NoticeProvider from '@/components/layout/notice-provider'
 import PageTransition from '@/components/layout/page-transition'
 import SchemeProvider from '@/components/layout/scheme-provider'
-import {
-  ThemeModeProvider,
-  useCustomTheme,
-} from '@/components/layout/use-custom-theme'
-import LogProvider from '@/components/logs/log-provider'
+import { ThemeModeProvider } from '@/components/layout/use-custom-theme'
 import UpdaterDialog from '@/components/updater/updater-dialog-wrapper'
 import { useNyanpasuStorageSubscribers } from '@/hooks/use-store'
-import useUpdater from '@/hooks/use-updater'
+import { UpdaterProvider } from '@/hooks/use-updater'
 import { FileRouteTypes } from '@/routeTree.gen'
 import { atomIsDrawer, memorizedRoutePathAtom } from '@/store'
-import { CssBaseline, useTheme } from '@mui/material'
-import { StyledEngineProvider, ThemeProvider } from '@mui/material/styles'
+import { CssBaseline } from '@mui/material'
+import { StyledEngineProvider, useColorScheme } from '@mui/material/styles'
 import { cn, useBreakpoint } from '@nyanpasu/ui'
 import {
   createRootRoute,
@@ -32,21 +28,18 @@ import 'dayjs/locale/zh-tw'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import { useAtom, useSetAtom } from 'jotai'
-import { lazy, useEffect } from 'react'
+import { lazy, PropsWithChildren, useEffect } from 'react'
 import { SWRConfig } from 'swr'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { NyanpasuProvider, useSettings } from '@nyanpasu/interface'
 import styles from './-__root.module.scss'
 
 dayjs.extend(relativeTime)
 dayjs.extend(customParseFormat)
 
 export const Catch = ({ error }: ErrorComponentProps) => {
-  const theme = useTheme()
-
+  const { mode } = useColorScheme()
   return (
-    <div
-      className={cn(styles.oops, theme.palette.mode === 'dark' && styles.dark)}
-    >
+    <div className={cn(styles.oops, mode === 'dark' && styles.dark)}>
       <h1>Oops!</h1>
       <p>Something went wrong... Caught at _root error boundary.</p>
       <pre>
@@ -63,7 +56,7 @@ const TanStackRouterDevtools = import.meta.env.PROD
   ? () => null // Render nothing in production
   : lazy(() =>
       // Lazy load in development
-      import('@tanstack/router-devtools').then((res) => ({
+      import('@tanstack/react-router-devtools').then((res) => ({
         default: res.TanStackRouterDevtools,
         // For Embedded Mode
         // default: res.TanStackRouterDevtoolsPanel
@@ -76,11 +69,15 @@ export const Route = createRootRoute({
   pendingComponent: Pending,
 })
 
-const queryClient = new QueryClient()
+const QueryLoaderProvider = ({ children }: PropsWithChildren) => {
+  const {
+    query: { isLoading },
+  } = useSettings()
+
+  return isLoading ? null : children
+}
 
 export default function App() {
-  const { theme } = useCustomTheme()
-
   const breakpoint = useBreakpoint()
 
   const setMemorizedPath = useSetAtom(memorizedRoutePathAtom)
@@ -96,7 +93,6 @@ export default function App() {
 
   const [isDrawer, setIsDrawer] = useAtom(atomIsDrawer)
 
-  useUpdater()
   useNyanpasuStorageSubscribers()
 
   useEffect(() => {
@@ -113,7 +109,7 @@ export default function App() {
   })
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <NyanpasuProvider>
       <SWRConfig
         value={{
           errorRetryCount: 5,
@@ -122,26 +118,30 @@ export default function App() {
           refreshInterval: 5000,
         }}
       >
-        <StyledEngineProvider injectFirst>
-          <ThemeProvider theme={theme}>
-            <CssBaseline />
-            <ThemeModeProvider />
-            <LogProvider />
-            <LocalesProvider />
-            <MutationProvider />
-            <NoticeProvider />
-            <SchemeProvider />
-            <UpdaterDialog />
+        <QueryLoaderProvider>
+          <StyledEngineProvider injectFirst>
+            <ThemeModeProvider>
+              <CssBaseline />
+              <LocalesProvider />
+              <MutationProvider />
+              <NoticeProvider />
+              <SchemeProvider />
+              <UpdaterDialog />
+              <UpdaterProvider />
 
-            <AppContainer isDrawer={isDrawer}>
-              <PageTransition
-                className={cn('absolute inset-4 top-10', !isDrawer && 'left-0')}
-              />
-              <TanStackRouterDevtools />
-            </AppContainer>
-          </ThemeProvider>
-        </StyledEngineProvider>
+              <AppContainer isDrawer={isDrawer}>
+                <PageTransition
+                  className={cn(
+                    'absolute inset-4 top-10',
+                    !isDrawer && 'left-0',
+                  )}
+                />
+                <TanStackRouterDevtools />
+              </AppContainer>
+            </ThemeModeProvider>
+          </StyledEngineProvider>
+        </QueryLoaderProvider>
       </SWRConfig>
-    </QueryClientProvider>
+    </NyanpasuProvider>
   )
 }

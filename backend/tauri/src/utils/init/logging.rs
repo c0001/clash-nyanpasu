@@ -1,12 +1,12 @@
-use crate::{config, utils::dirs, Config};
-use anyhow::{anyhow, bail, Result};
+use crate::{Config, config, utils::dirs};
+use anyhow::{Result, anyhow, bail};
 use parking_lot::Mutex;
 use std::{
     fs,
     io::IsTerminal,
     sync::{
-        mpsc::{self, Sender},
         OnceLock,
+        mpsc::{self, Sender},
     },
     thread,
 };
@@ -16,7 +16,7 @@ use tracing_appender::{
     rolling::Rotation,
 };
 use tracing_log::log_tracer;
-use tracing_subscriber::{filter, fmt, layer::SubscriberExt, reload, EnvFilter};
+use tracing_subscriber::{EnvFilter, filter, fmt, layer::SubscriberExt, reload};
 
 use super::nyanpasu::LoggingLevel;
 
@@ -65,8 +65,8 @@ pub fn init() -> Result<()> {
                 std::convert::Into::<filter::LevelFilter>::into(LoggingLevel::Warn).into(),
             )
             .from_env_lossy()
-            .add_directive(format!("nyanpasu={}", log_level).parse().unwrap())
-            .add_directive(format!("clash_nyanpasu={}", log_level).parse().unwrap()),
+            .add_directive(format!("nyanpasu={log_level}").parse().unwrap())
+            .add_directive(format!("clash_nyanpasu={log_level}").parse().unwrap()),
     );
 
     // register the logger
@@ -75,6 +75,7 @@ pub fn init() -> Result<()> {
         fmt::layer()
             .json()
             .with_writer(appender)
+            .with_current_span(true)
             .with_line_number(true)
             .with_file(true),
     );
@@ -98,8 +99,8 @@ pub fn init() -> Result<()> {
                                     .into(),
                             )
                             .from_env_lossy()
-                            .add_directive(format!("nyanpasu={}", level).parse().unwrap())
-                            .add_directive(format!("clash_nyanpasu={}", level).parse().unwrap()),
+                            .add_directive(format!("nyanpasu={level}").parse().unwrap())
+                            .add_directive(format!("clash_nyanpasu={level}").parse().unwrap()),
                     )
                     .unwrap(); // panic if error
             }

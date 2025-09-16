@@ -3,9 +3,9 @@ import { useSetAtom } from 'jotai'
 import { lazy, RefObject, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { atomRulePage } from '@/components/rules/modules/store'
-import { alpha, FilledInputProps, TextField, useTheme } from '@mui/material'
-import { useClashCore } from '@nyanpasu/interface'
-import { BasePage } from '@nyanpasu/ui'
+import { FilledInputProps, TextField } from '@mui/material'
+import { useClashRules } from '@nyanpasu/interface'
+import { alpha, BasePage } from '@nyanpasu/ui'
 import { createFileRoute } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/rules')({
@@ -15,9 +15,7 @@ export const Route = createFileRoute('/rules')({
 function RulesPage() {
   const { t } = useTranslation()
 
-  const { palette } = useTheme()
-
-  const { getRules } = useClashCore()
+  const { data } = useClashRules()
 
   const [filterText, setFilterText] = useState('')
 
@@ -28,25 +26,23 @@ function RulesPage() {
   useDebounceEffect(
     () => {
       setRule({
-        data: getRules.data?.rules.filter((each) =>
-          each.payload.includes(filterText),
-        ),
+        data: data?.rules.filter((each) => each.payload.includes(filterText)),
         scrollRef: viewportRef as RefObject<HTMLElement>,
       })
     },
-    [getRules.data, viewportRef.current, filterText],
+    [data, viewportRef.current, filterText],
     { wait: 150 },
   )
 
   const inputProps: Partial<FilledInputProps> = {
-    sx: {
+    sx: (theme) => ({
       borderRadius: 7,
-      backgroundColor: alpha(palette.primary.main, 0.1),
+      backgroundColor: alpha(theme.vars.palette.primary.main, 0.1),
 
       fieldset: {
         border: 'none',
       },
-    },
+    }),
   }
 
   const Component = lazy(() => import('@/components/rules/rule-page'))
@@ -65,7 +61,9 @@ function RulesPage() {
           onChange={(e) => setFilterText(e.target.value)}
           className="!pb-0"
           sx={{ input: { py: 1, fontSize: 14 } }}
-          InputProps={inputProps}
+          slotProps={{
+            input: inputProps,
+          }}
         />
       }
       viewportRef={viewportRef}

@@ -4,13 +4,12 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { message } from '@/utils/notification'
 import { Refresh } from '@mui/icons-material'
-import LoadingButton from '@mui/lab/LoadingButton'
-import { Chip, Paper } from '@mui/material'
-import { ProviderItem, useClashCore } from '@nyanpasu/interface'
+import { Button, Chip, Paper } from '@mui/material'
+import { ClashProxiesProviderQueryItem } from '@nyanpasu/interface'
 import ProxiesProviderTraffic from './proxies-provider-traffic'
 
 export interface ProxiesProviderProps {
-  provider: ProviderItem
+  provider: ClashProxiesProviderQueryItem
 }
 
 export const ProxiesProvider = ({ provider }: ProxiesProviderProps) => {
@@ -18,13 +17,11 @@ export const ProxiesProvider = ({ provider }: ProxiesProviderProps) => {
 
   const [loading, setLoading] = useState(false)
 
-  const { updateProxiesProviders } = useClashCore()
-
   const handleClick = useLockFn(async () => {
     try {
       setLoading(true)
 
-      await updateProxiesProviders(provider.name)
+      await provider.mutate()
     } catch (e) {
       message(`Update ${provider.name} failed.\n${String(e)}`, {
         kind: 'error',
@@ -70,7 +67,7 @@ export const ProxiesProvider = ({ provider }: ProxiesProviderProps) => {
           })}
         />
 
-        <LoadingButton
+        <Button
           loading={loading}
           size="small"
           variant="contained"
@@ -78,7 +75,7 @@ export const ProxiesProvider = ({ provider }: ProxiesProviderProps) => {
           onClick={handleClick}
         >
           <Refresh />
-        </LoadingButton>
+        </Button>
       </div>
     </Paper>
   )

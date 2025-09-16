@@ -1,3 +1,4 @@
+import { useLockFn } from 'ahooks'
 import { useAtom } from 'jotai'
 import { RefObject, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -14,21 +15,13 @@ import SortSelector from '@/components/proxies/sort-selector'
 import { proxyGroupAtom } from '@/store'
 import { proxiesFilterAtom } from '@/store/proxies'
 import { Check } from '@mui/icons-material'
+import { TextField, ToggleButton, ToggleButtonGroup } from '@mui/material'
 import {
-  alpha,
-  Box,
-  Button,
-  ButtonGroup,
-  TextField,
-  useTheme,
-} from '@mui/material'
-import {
-  Clash,
   ProxyGroupItem,
-  useClashCore,
-  useNyanpasu,
+  useClashProxies,
+  useProxyMode,
 } from '@nyanpasu/interface'
-import { cn, SidePage } from '@nyanpasu/ui'
+import { alpha, cn, SidePage } from '@nyanpasu/ui'
 import { createFileRoute } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/proxies')({
@@ -36,7 +29,6 @@ export const Route = createFileRoute('/proxies')({
 })
 
 function SideBar() {
-  const { palette } = useTheme()
   const [proxiesFilter, setProxiesFilter] = useAtom(proxiesFilterAtom)
   const { t } = useTranslation()
 
@@ -53,14 +45,16 @@ function SideBar() {
       onChange={(e) =>
         setProxiesFilter(!e.target.value.trim().length ? null : e.target.value)
       }
-      InputProps={{
-        sx: {
-          borderRadius: 7,
-          backgroundColor: alpha(palette.primary.main, 0.1),
+      slotProps={{
+        input: {
+          sx: (theme) => ({
+            borderRadius: 7,
+            backgroundColor: alpha(theme.vars.palette.primary.main, 0.1),
 
-          fieldset: {
-            border: 'none',
-          },
+            fieldset: {
+              border: 'none',
+            },
+          }),
         },
       }}
     />
@@ -70,18 +64,18 @@ function SideBar() {
 function ProxyPage() {
   const { t } = useTranslation()
 
-  const { getCurrentMode, setCurrentMode } = useNyanpasu()
+  const { value: proxyMode, upsert } = useProxyMode()
 
-  const { data, updateGroupDelay } = useClashCore()
+  const { data } = useClashProxies()
 
   const [proxyGroup] = useAtom(proxyGroupAtom)
 
   const [group, setGroup] = useState<ProxyGroupItem>()
 
   useEffect(() => {
-    if (getCurrentMode.global) {
+    if (proxyMode.global) {
       setGroup(data?.global)
-    } else if (getCurrentMode.direct) {
+    } else if (proxyMode.direct) {
       setGroup(data?.direct ? { ...data.direct, all: [] } : undefined)
     } else {
       if (proxyGroup.selector !== null) {
@@ -91,41 +85,59 @@ function ProxyPage() {
   }, [
     proxyGroup.selector,
     data?.groups,
-    getCurrentMode,
     data?.global,
+    proxyMode.global,
+    proxyMode.direct,
     data?.direct,
   ])
 
   const handleDelayClick = async () => {
-    await updateGroupDelay(proxyGroup.selector as number)
+    if (proxyMode.global) {
+      await data?.global.mutateDelay()
+    } else {
+      if (proxyGroup.selector !== null) {
+        await data?.groups[proxyGroup.selector].mutateDelay()
+      }
+    }
   }
 
   const hasProxies = Boolean(data?.groups.length)
 
   const nodeListRef = useRef<NodeListRef>(null)
 
+  const handleSwitch = useLockFn(async (key: string) => {
+    await upsert(key)
+  })
+
   const Header = useMemo(() => {
-    const handleSwitch = (key: string) => {
-      setCurrentMode(key)
-    }
     return (
-      <Box display="flex" alignItems="center" gap={1}>
-        <ButtonGroup size="small">
-          {Object.entries(getCurrentMode).map(([key, enabled]) => (
-            <Button
+      <div className="flex items-center gap-1">
+        <ToggleButtonGroup
+          color="primary"
+          size="small"
+          exclusive
+          onChange={(_, newValue) => handleSwitch(newValue)}
+        >
+          {Object.entries(proxyMode).map(([key, enabled], index) => (
+            <ToggleButton
               key={key}
-              variant={enabled ? 'contained' : 'outlined'}
-              onClick={() => handleSwitch(key)}
-              sx={{ textTransform: 'capitalize' }}
+              className={cn(
+                'flex justify-center gap-0.5 !px-3',
+                index === 0 && '!rounded-l-full',
+                index === Object.entries(proxyMode).length - 1 &&
+                  '!rounded-r-full',
+              )}
+              value={key}
+              selected={enabled}
             >
               {enabled && <Check className="mr-[0.1rem] -ml-2 scale-75" />}
               {t(key)}
-            </Button>
+            </ToggleButton>
           ))}
-        </ButtonGroup>
-      </Box>
+        </ToggleButtonGroup>
+      </div>
     )
-  }, [getCurrentMode, setCurrentMode, t])
+  }, [handleSwitch, proxyMode, t])
 
   const leftViewportRef = useRef<HTMLDivElement>(null)
 
@@ -134,19 +146,19 @@ function ProxyPage() {
   return (
     <SidePage
       title={t('Proxy Groups')}
-      header={Header}
-      sideBar={<SideBar />}
       leftViewportRef={leftViewportRef}
       rightViewportRef={rightViewportRef}
+      header={Header}
+      sideBar={<SideBar />}
       side={
         hasProxies &&
-        getCurrentMode.rule && (
+        proxyMode.rule && (
           <GroupList scrollRef={leftViewportRef as RefObject<HTMLElement>} />
         )
       }
       portalRightRoot={
         hasProxies &&
-        !getCurrentMode.direct && (
+        !proxyMode.direct && (
           <div
             className={cn(
               'absolute z-10 flex w-full items-center justify-between px-4 py-2 backdrop-blur',
@@ -171,7 +183,7 @@ function ProxyPage() {
         )
       }
     >
-      {!getCurrentMode.direct ? (
+      {!proxyMode.direct ? (
         hasProxies ? (
           <>
             <NodeList
